@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { verifyRazorpaySignature, razorpayInstance } from "@/lib/razorpay";
 import { randomUUID } from "crypto";
+import { getCustomerUser } from "@/lib/account-auth";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    const accountUser = await getCustomerUser();
     const { customer, items, paymentMethod, deliveryMethod, giftMessage, orderNotes,
       razorpay_order_id, razorpay_payment_id, razorpay_signature } = body ?? {};
 
@@ -104,6 +106,7 @@ export async function POST(req: Request) {
       return tx.order.create({
         data: {
           orderNumber: safeOrderNumber,
+          userId: accountUser?.id ?? null,
           guestEmail: String(customer.email).trim().toLowerCase(),
           guestPhone: String(customer.phone).trim(),
           guestName: String(customer.fullName).trim(),

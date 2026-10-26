@@ -10,50 +10,22 @@ function TrackOrderContent() {
   const initialOrderId = searchParams.get("orderId") || "";
 
   const [orderQuery, setOrderQuery] = useState(initialOrderId);
-  const [searchedOrder, setSearchedOrder] = useState<any>(
-    initialOrderId
-      ? {
-          orderNumber: initialOrderId,
-          status: "SHIPPED",
-          courier: "Shiprocket (Air Express Priority)",
-          trackingId: "SR-928472910IN",
-          expectedDelivery: "28 October 2026",
-          placedOn: "25 October 2026",
-          itemsCount: 1,
-          totalAmount: 34999,
-          items: [
-            {
-              title: "Varanasi Rangkat Kadwa Silk Saree in Antique Gold",
-              size: "Free Size",
-              color: "Antique Gold",
-              qty: 1,
-            },
-          ],
-        }
-      : null
-  );
+  const [email, setEmail] = useState("");
+  const [searchedOrder, setSearchedOrder] = useState<any>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!orderQuery.trim()) return;
-    setSearchedOrder({
-      orderNumber: orderQuery.trim(),
-      status: "SHIPPED",
-      courier: "Shiprocket Logistics (Delhivery Surface)",
-      trackingId: `SR-${Math.floor(100000000 + Math.random() * 900000000)}IN`,
-      expectedDelivery: "In 3 Business Days",
-      placedOn: "25 October 2026",
-      itemsCount: 1,
-      totalAmount: 12499,
-      items: [
-        {
-          title: "Chanderi Handspun Silk-Cotton Kurta Set",
-          size: "M",
-          color: "Ivory Ecru",
-          qty: 1,
-        },
-      ],
-    });
+    setLoading(true); setError(""); setSearchedOrder(null);
+    try {
+      const response = await fetch("/api/orders/lookup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderNumber: orderQuery, email }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "We could not find this order.");
+      setSearchedOrder({ ...data.order, courier: data.order.courierPartner || "Awaiting dispatch", totalAmount: Number(data.order.totalAmount), items: data.order.items.map((item: any) => ({ ...item, qty: item.quantity })) });
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Order lookup failed."); }
+    finally { setLoading(false); }
   };
 
   const getStepStatus = (stepIndex: number, currentStatus: string) => {
@@ -74,13 +46,13 @@ function TrackOrderContent() {
           Track Your Preheritage Order
         </h1>
         <p className="text-xs sm:text-sm text-charcoal-100 font-light">
-          Enter your order reference number (e.g. PRE-2026-1001) sent to your email or SMS.
+          Enter your order reference and checkout email. Signed-in customers can look up their own orders.
         </p>
       </div>
 
       {/* Search Input Box */}
       <div className="bg-ivory-50 p-6 rounded-sm border border-ivory-300 shadow-sm mb-10 max-w-xl mx-auto">
-        <form onSubmit={handleSearch} className="flex gap-2">
+        <form onSubmit={handleSearch} className="space-y-3">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-charcoal-100 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -92,13 +64,16 @@ function TrackOrderContent() {
               className="w-full pl-9 pr-3 py-2.5 bg-white border border-ivory-300 text-xs font-mono uppercase rounded focus:outline-none focus:border-gold-500"
             />
           </div>
+          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Checkout email for guest orders" className="w-full rounded border border-ivory-300 bg-white px-3 py-2.5 text-xs" />
           <button
             type="submit"
-            className="px-6 py-2.5 bg-charcoal-900 hover:bg-gold-600 text-ivory-50 text-xs uppercase tracking-widest font-semibold rounded transition-colors"
+            disabled={loading}
+            className="px-6 py-2.5 bg-charcoal-900 hover:bg-gold-600 text-ivory-50 text-xs uppercase tracking-widest font-semibold rounded transition-colors disabled:opacity-50"
           >
-            Track
+            {loading ? "Searching…" : "Track"}
           </button>
         </form>
+        {error && <p role="alert" className="mt-3 text-xs text-rose-700">{error}</p>}
       </div>
 
       {/* Track Results */}

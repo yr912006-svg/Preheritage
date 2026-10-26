@@ -1,26 +1,27 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { Layers, AlertTriangle, Plus, Minus, Search, Check } from "lucide-react";
-import { SAMPLE_PRODUCTS } from "@/lib/sample-data";
 
 export default function AdminInventoryPage() {
-  const [inventory, setInventory] = useState(
-    SAMPLE_PRODUCTS.map((p) => ({
-      id: p.id,
-      title: p.title,
-      sku: p.sku,
-      image: p.images[0],
-      stock: p.stock,
-      lowStockAlert: 5,
-    }))
-  );
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  const updateStock = (id: string, delta: number) => {
-    setInventory((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, stock: Math.max(0, item.stock + delta) } : item))
-    );
+  useEffect(() => {
+    void fetch("/api/admin/inventory").then(async (response) => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Could not load inventory.");
+      setInventory(data.inventory);
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load inventory.")).finally(() => setLoading(false));
+  }, []);
+
+  const updateStock = async (id: string, delta: number) => {
+    const response = await fetch("/api/admin/inventory", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: id, delta }) });
+    const data = await response.json();
+    if (!response.ok) { setError(data.message || "Could not update stock."); return; }
+    setInventory((prev) => prev.map((item) => item.id === id ? { ...item, stock: data.product.stock } : item));
   };
 
   return (
@@ -31,6 +32,7 @@ export default function AdminInventoryPage() {
           Monitor variant-level inventories, trigger restock dispatches, and manage low-stock thresholds
         </p>
       </div>
+      {error && <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-3 text-xs text-rose-800">{error}</p>}
 
       <div className="bg-ivory-50 rounded-sm border border-ivory-300 shadow-sm overflow-hidden">
         <div className="overflow-x-auto text-xs">
@@ -50,7 +52,7 @@ export default function AdminInventoryPage() {
                 <tr key={item.id} className="hover:bg-ivory-100/60 transition-colors">
                   <td className="p-4 flex items-center gap-3">
                     <div className="relative aspect-[3/4] w-10 rounded bg-ivory-200 overflow-hidden shrink-0 border border-ivory-300">
-                      <Image src={item.image} alt={item.title} fill className="object-cover" />
+                      {item.image && <Image src={item.image} alt={item.title} fill unoptimized={item.image.startsWith("/api/storage/")} className="object-cover" />}
                     </div>
                     <span className="font-serif font-bold text-sm text-charcoal-900 line-clamp-1">{item.title}</span>
                   </td>
@@ -91,6 +93,8 @@ export default function AdminInventoryPage() {
           </table>
         </div>
       </div>
+      {loading && <p className="p-6 text-center text-xs text-charcoal-400">Loading inventory…</p>}
+      {!loading && inventory.length === 0 && !error && <p className="p-8 text-center text-sm text-charcoal-400">No active inventory is available.</p>}
     </div>
   );
 }

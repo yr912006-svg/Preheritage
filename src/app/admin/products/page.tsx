@@ -1,15 +1,25 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Plus, Search, Edit, Trash2, Copy, Eye, AlertCircle } from "lucide-react";
-import { SAMPLE_PRODUCTS, ProductItem } from "@/lib/sample-data";
+import { ProductItem } from "@/lib/sample-data";
 import { formatPrice } from "@/lib/utils";
 
 export default function AdminProductsPage() {
-  const [products, setProducts] = useState<ProductItem[]>(SAMPLE_PRODUCTS);
+  const [products, setProducts] = useState<(ProductItem & { status: string })[]>([]);
   const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void fetch("/api/admin/products").then(async (response) => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Could not load products.");
+      setProducts(data.products);
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load products.")).finally(() => setLoading(false));
+  }, []);
 
   const filtered = products.filter(
     (p) =>
@@ -18,21 +28,20 @@ export default function AdminProductsPage() {
       p.category.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to remove this handcrafted creation from the catalog?")) {
-      setProducts(products.filter((p) => p.id !== id));
+      const response = await fetch("/api/admin/products", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: id }) });
+      const data = await response.json();
+      if (response.ok) setProducts((previous) => previous.filter((product) => product.id !== id));
+      else setError(data.message || "Could not archive this product.");
     }
   };
 
-  const handleDuplicate = (prod: ProductItem) => {
-    const copy: ProductItem = {
-      ...prod,
-      id: `prod-${Date.now()}`,
-      title: `${prod.title} (Copy)`,
-      slug: `${prod.slug}-copy-${Date.now().toString().slice(-4)}`,
-      sku: `${prod.sku}-COPY`,
-    };
-    setProducts([copy, ...products]);
+  const handleDuplicate = async (prod: ProductItem) => {
+    const response = await fetch("/api/admin/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ duplicateFromId: prod.id }) });
+    const data = await response.json();
+    if (response.ok) setProducts((previous) => [data.product, ...previous]);
+    else setError(data.message || "Could not duplicate this product.");
   };
 
   return (
@@ -55,6 +64,8 @@ export default function AdminProductsPage() {
           <span>Add New Creation</span>
         </Link>
       </div>
+
+      {error && <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-3 text-xs text-rose-800">{error}</p>}
 
       {/* Search Bar */}
       <div className="bg-ivory-50 p-4 rounded-sm border border-ivory-300 shadow-sm flex items-center justify-between">
@@ -118,7 +129,7 @@ export default function AdminProductsPage() {
                   </td>
                   <td className="p-4">
                     <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px] uppercase font-bold">
-                      Active
+                      {prod.status}
                     </span>
                   </td>
                   <td className="p-4 text-right">
@@ -153,6 +164,8 @@ export default function AdminProductsPage() {
           </table>
         </div>
       </div>
+      {loading && <p className="p-6 text-center text-xs text-charcoal-400">Loading products…</p>}
+      {!loading && products.length === 0 && !error && <p className="p-8 text-center text-sm text-charcoal-400">No products yet. Add your first creation to publish it in the storefront.</p>}
     </div>
   );
 }

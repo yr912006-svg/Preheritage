@@ -7,7 +7,7 @@ import { ArrowRight, Sparkles } from "lucide-react";
 
 export const HeroBanner: React.FC = () => {
   return (
-    <section className="relative min-h-[85vh] sm:min-h-[90vh] flex items-center justify-center bg-charcoal-950 overflow-hidden">
+    <section className="relative min-h-[85vh] sm:min-h-[90vh] flex items-center justify-center bg-charcoal-950 lg:bg-[#3b0710] overflow-hidden">
       {/* Background Hero Imagery with Luxury Overlay */}
       <div className="absolute inset-0 z-0">
         <Image
@@ -15,7 +15,7 @@ export const HeroBanner: React.FC = () => {
           alt="PREHERITAGE Indian Cultural Luxury Fashion"
           fill
           priority
-          className="object-cover object-center opacity-40 scale-105 animate-pulse duration-[10000ms]"
+          className="object-cover object-center opacity-40 scale-105 lg:object-contain lg:object-center lg:scale-100 animate-pulse duration-[10000ms]"
         />
         {/* Subtle Radial Gradient */}
         <div className="absolute inset-0 bg-gradient-to-t from-charcoal-950 via-charcoal-950/60 to-charcoal-950/40" />

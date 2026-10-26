@@ -17,6 +17,8 @@ const WishlistContext = createContext<WishlistContextType | undefined>(undefined
 
 export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [wishlist, setWishlist] = useState<ProductItem[]>([]);
+  const [wishlistReady, setWishlistReady] = useState(false);
+  const [accountWishlist, setAccountWishlist] = useState(false);
 
   useEffect(() => {
     try {
@@ -24,18 +26,40 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (saved) setWishlist(JSON.parse(saved));
     } catch (e) {
       console.error("Failed to load wishlist", e);
+    } finally {
+      setWishlistReady(true);
     }
   }, []);
 
   useEffect(() => {
+    if (!wishlistReady) return;
+    let active = true;
+    void fetch("/api/account/wishlist").then(async (response) => {
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!active) return;
+      if (data.products?.length) setWishlist(data.products);
+      else if (wishlist.length) {
+        await Promise.all(wishlist.map((item) => fetch("/api/account/wishlist", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: item.id }),
+        })));
+      }
+      if (active) setAccountWishlist(true);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [wishlistReady]);
+
+  useEffect(() => {
+    if (!wishlistReady) return;
     try {
       localStorage.setItem("preheritage_wishlist", JSON.stringify(wishlist));
     } catch (e) {
       console.error("Failed to save wishlist", e);
     }
-  }, [wishlist]);
+  }, [wishlist, wishlistReady]);
 
   const addToWishlist = (product: ProductItem) => {
+    if (accountWishlist) void fetch("/api/account/wishlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: product.id }) }).catch(() => undefined);
     setWishlist((prev) => {
       if (prev.some((item) => item.id === product.id)) return prev;
       return [...prev, product];
@@ -43,6 +67,7 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const removeFromWishlist = (productId: string) => {
+    if (accountWishlist) void fetch("/api/account/wishlist", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId }) }).catch(() => undefined);
     setWishlist((prev) => prev.filter((item) => item.id !== productId));
   };
 
@@ -58,12 +83,12 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return wishlist.some((item) => item.id === productId);
   };
 
-  const clearWishlist = () => setWishlist([]);
-
-  const notifyRestock = (productId: string, email: string) => {
-    console.log(`[RESTOCK NOTIFICATION REGISTERED] Product: ${productId}, Email: ${email}`);
-    // Can also call API
+  const clearWishlist = () => {
+    if (accountWishlist) void Promise.all(wishlist.map((item) => fetch("/api/account/wishlist", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: item.id }) }))).catch(() => undefined);
+    setWishlist([]);
   };
+
+  const notifyRestock = (_productId: string, _email: string) => undefined;
 
   return (
     <WishlistContext.Provider

@@ -28,6 +28,8 @@ export default function NewProductPage() {
   const [isFeatured, setIsFeatured] = useState(true);
   const [isBestseller, setIsBestseller] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
 
@@ -49,12 +51,25 @@ export default function NewProductPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSaved(true);
-    setTimeout(() => {
+    setIsSaving(true);
+    setSaveError("");
+    try {
+      const response = await fetch("/api/admin/products", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, sku, category, region, state, price, mrp, costPrice, stock, shortDesc, description, culturalStory, fabricDetails, careInstructions, imageUrl, isFeatured, isBestSeller: isBestseller }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Product could not be created.");
+      setIsSaved(true);
       router.push("/admin/products");
-    }, 1500);
+      router.refresh();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Product could not be created.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -82,6 +97,7 @@ export default function NewProductPage() {
           <span>Product successfully created and added to PREHERITAGE catalog!</span>
         </div>
       )}
+      {saveError && <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-3 text-xs text-rose-800">{saveError}</p>}
 
       <form onSubmit={handleSubmit} className="space-y-6 text-xs">
         {/* Core Details */}
@@ -227,7 +243,7 @@ export default function NewProductPage() {
           </h2>
 
           <div>
-            <label className="block text-charcoal-400 font-semibold mb-1">Upload a product image</label>
+            <label className="block text-charcoal-400 font-semibold mb-1">Upload a product image (Neon object storage)</label>
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
@@ -324,9 +340,10 @@ export default function NewProductPage() {
           </Link>
           <button
             type="submit"
-            className="px-8 py-3 bg-charcoal-900 hover:bg-gold-600 text-ivory-50 text-xs uppercase tracking-widest font-semibold rounded transition-colors shadow-luxury"
+            disabled={isUploading || isSaving}
+            className="px-8 py-3 bg-charcoal-900 hover:bg-gold-600 text-ivory-50 text-xs uppercase tracking-widest font-semibold rounded transition-colors shadow-luxury disabled:opacity-50"
           >
-            Publish to Storefront
+            {isSaving ? "Saving…" : "Publish to Storefront"}
           </button>
         </div>
       </form>

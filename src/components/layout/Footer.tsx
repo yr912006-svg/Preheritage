@@ -9,20 +9,24 @@ import { CATEGORIES, REGIONS } from "@/lib/sample-data";
 export const Footer: React.FC = () => {
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
+  const [subscribeError, setSubscribeError] = useState("");
 
   const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
+    setSubscribeError("");
     try {
-      await fetch("/api/newsletter", {
+      const response = await fetch("/api/newsletter", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) throw new Error(result.message || "Subscription could not be saved. Please try again.");
       setSubscribed(true);
       setEmail("");
-    } catch {
-      setSubscribed(true);
+    } catch (error) {
+      setSubscribeError(error instanceof Error ? error.message : "Subscription could not be saved. Please try again.");
     }
   };
 
@@ -77,6 +81,8 @@ export const Footer: React.FC = () => {
                   <span>Welcome to PREHERITAGE. Use code <strong>FIRSTWEAR</strong> on your first order.</span>
                 </div>
               ) : (
+                <>
+                {subscribeError && <p role="alert" className="mb-2 text-xs text-rose-300">{subscribeError}</p>}
                 <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-2">
                   <div className="relative flex-1">
                     <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-charcoal-200" />
@@ -97,6 +103,7 @@ export const Footer: React.FC = () => {
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </form>
+                </>
               )}
             </div>
           </div>
@@ -237,8 +244,8 @@ export const Footer: React.FC = () => {
             <Heart className="w-3 h-3 inline text-rose-500 fill-rose-500" /> for Indian Heritage.
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-charcoal-300 mr-2">Secure Payments:</span>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <span className="w-full text-center text-[10px] uppercase tracking-wider text-charcoal-300 sm:w-auto sm:text-left sm:mr-2">Secure Payments:</span>
             {["UPI", "RuPay", "Visa", "Mastercard", "NetBanking", "COD"].map((method) => (
               <span
                 key={method}

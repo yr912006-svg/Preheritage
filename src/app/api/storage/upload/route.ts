@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
-import { neonFiles, storageObjectUrl } from "@/lib/neon-storage";
+import { getNeonFiles, storageObjectUrl } from "@/lib/neon-storage";
 
 export const runtime = "nodejs";
 
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     }
 
     const key = `products/${randomUUID()}.${extension}`;
-    await neonFiles.upload(key, new Uint8Array(await file.arrayBuffer()), {
+    await getNeonFiles().upload(key, new Uint8Array(await file.arrayBuffer()), {
       contentType: file.type,
       cacheControl: "public, max-age=31536000, immutable",
     });

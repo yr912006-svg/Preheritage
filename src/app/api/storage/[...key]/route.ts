@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isValidStorageKey, neonFiles } from "@/lib/neon-storage";
+import { getNeonFiles, isValidStorageKey } from "@/lib/neon-storage";
 
 export const runtime = "nodejs";
 
@@ -12,7 +12,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
   }
 
   try {
-    const file = await neonFiles.download(key);
+    const file = await getNeonFiles().download(key);
     return new NextResponse(await file.arrayBuffer(), {
       headers: {
         "Content-Type": file.type || "application/octet-stream",
@@ -20,7 +20,10 @@ export async function GET(_request: Request, { params }: RouteContext) {
         "X-Content-Type-Options": "nosniff",
       },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Neon Object Storage is not configured:")) {
+      return NextResponse.json({ error: "Image storage is temporarily unavailable." }, { status: 503 });
+    }
     return NextResponse.json({ error: "Image not found." }, { status: 404 });
   }
 }

@@ -4,12 +4,12 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import ProductCard from "@/components/shop/ProductCard";
-import { SAMPLE_PRODUCTS } from "@/lib/sample-data";
+import type { ProductItem } from "@/lib/sample-data";
 
-export const BestSellers: React.FC = () => {
+export const BestSellers: React.FC<{ products: ProductItem[] }> = ({ products }) => {
   const [filter, setFilter] = useState<"ALL" | "BESTSELLER" | "NEW">("ALL");
 
-  const filteredProducts = SAMPLE_PRODUCTS.filter((p) => {
+  const filteredProducts = products.filter((p) => {
     if (filter === "BESTSELLER") return p.isBestSeller;
     if (filter === "NEW") return p.isNewArrival;
     return true;
@@ -65,11 +65,11 @@ export const BestSellers: React.FC = () => {
         </div>
 
         {/* Products Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+        {filteredProducts.length ? <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
           {filteredProducts.slice(0, 8).map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}
-        </div>
+        </div> : <p className="rounded-sm border border-ivory-200 bg-ivory-100 p-8 text-center text-sm text-charcoal-400">Our current collection will appear here as soon as it is added to the catalogue.</p>}
 
         {/* Bottom CTA */}
         <div className="mt-14 text-center">

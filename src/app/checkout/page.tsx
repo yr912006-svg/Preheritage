@@ -22,22 +22,44 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { cart, subtotal, discountAmount, clearCart, appliedCoupon } = useCart();
 
-  // Guest vs Registered
-  const [isGuest, setIsGuest] = useState(true);
-
   // Delivery details form
   const [formData, setFormData] = useState({
-    fullName: "Pooja Sharma",
-    email: "pooja.sharma@example.com",
-    phone: "9876543210",
-    houseFlat: "Villa 14, Royal Palm Residences",
-    area: "Golf Course Road",
-    landmark: "Near DLF Horizon",
-    city: "Gurugram",
-    state: "Haryana",
-    pincode: "122002",
+    fullName: "",
+    email: "",
+    phone: "",
+    houseFlat: "",
+    area: "",
+    landmark: "",
+    city: "",
+    state: "",
+    pincode: "",
     country: "India",
   });
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([fetch("/api/account/profile"), fetch("/api/account/addresses")]).then(async ([profileResponse, addressResponse]) => {
+      if (!active) return;
+      const [profileData, addressData] = await Promise.all([profileResponse.json(), addressResponse.json()]);
+      const profile = profileData.profile;
+      const address = addressData.addresses?.find((entry: any) => entry.isDefault) ?? addressData.addresses?.[0];
+      if (!profile && !address) return;
+      setFormData((current) => ({
+        ...current,
+        fullName: address?.fullName ?? profile?.name ?? current.fullName,
+        email: profile?.email ?? current.email,
+        phone: address?.phone ?? profile?.phone ?? current.phone,
+        houseFlat: address?.houseFlat ?? current.houseFlat,
+        area: address?.area ?? current.area,
+        landmark: address?.landmark ?? current.landmark,
+        city: address?.city ?? current.city,
+        state: address?.state ?? current.state,
+        pincode: address?.pincode ?? current.pincode,
+        country: address?.country ?? current.country,
+      }));
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   // Shipping & Gift Wrap
   const [deliveryMethod, setDeliveryMethod] = useState<"standard" | "express">("standard");

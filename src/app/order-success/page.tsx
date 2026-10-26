@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense } from "react";
+import React, { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, PackageCheck, Truck, Download, ArrowRight, ShieldCheck } from "lucide-react";
@@ -8,9 +8,34 @@ import { formatPrice } from "@/lib/utils";
 
 function OrderSuccessContent() {
   const searchParams = useSearchParams();
-  const orderId = searchParams.get("orderId") || "PRE-2026-84920";
-  const paymentMethod = searchParams.get("method") || "RAZORPAY";
-  const paymentId = searchParams.get("paymentId");
+  const orderId = searchParams.get("orderId") || "";
+  const [email, setEmail] = useState("");
+  const [verifiedOrder, setVerifiedOrder] = useState<any>(null);
+  const [lookupError, setLookupError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const verifyOrder = async (event: React.FormEvent) => {
+    event.preventDefault(); setLookupError(""); setLoading(true);
+    try {
+      const response = await fetch("/api/orders/lookup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderNumber: orderId, email }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Order confirmation could not be verified.");
+      setVerifiedOrder(data.order);
+    } catch (error) { setLookupError(error instanceof Error ? error.message : "Order confirmation could not be verified."); }
+    finally { setLoading(false); }
+  };
+
+  if (!verifiedOrder) return <div className="bg-ivory-50 p-8 sm:p-12 rounded-sm border border-ivory-300 text-center">
+    <h1 className="font-serif text-3xl font-bold text-charcoal-900">Verify your order</h1>
+    <p className="mt-3 text-sm text-charcoal-500">We only show confirmation details for an order belonging to your signed-in account or matching your checkout email.</p>
+    {!orderId && <p role="alert" className="mt-3 text-xs text-rose-700">No order reference was provided.</p>}
+    <form onSubmit={verifyOrder} className="mx-auto mt-6 flex max-w-md flex-col gap-3">
+      <label className="text-left text-xs text-charcoal-600">Order reference<input value={orderId} readOnly className="mt-1 w-full rounded border border-ivory-300 bg-ivory-100 p-3 font-mono" /></label>
+      <label className="text-left text-xs text-charcoal-600">Checkout email for guest orders<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 w-full rounded border border-ivory-300 bg-white p-3" /></label>
+      {lookupError && <p role="alert" className="text-left text-xs text-rose-700">{lookupError}</p>}
+      <button disabled={!orderId || loading} className="rounded bg-charcoal-900 px-5 py-3 text-xs font-semibold uppercase text-white disabled:opacity-50">{loading ? "Checking…" : "Verify order"}</button>
+    </form>
+  </div>;
+  const paymentMethod = verifiedOrder.paymentMethod;
 
   return (
     <div className="bg-ivory-50 p-8 sm:p-12 rounded-sm border border-ivory-300 shadow-luxury text-center">
@@ -28,7 +53,7 @@ function OrderSuccessContent() {
       </h1>
 
       <p className="text-xs sm:text-sm text-charcoal-100 max-w-lg mx-auto mb-8 font-light leading-relaxed">
-        Your handcrafted order has been received and allocated to our master artisan packing ateliers. An order confirmation invoice and tracking updates have been dispatched to your email and WhatsApp.
+        Your order is recorded. Fulfillment and tracking details will appear here after the team updates its status.
       </p>
 
       {/* Order Details Card */}
@@ -41,7 +66,7 @@ function OrderSuccessContent() {
           <div className="sm:text-right">
             <span className="text-charcoal-100 block">Payment Status</span>
             <span className="inline-block px-2.5 py-1 bg-emerald-100 text-emerald-800 font-semibold rounded text-[11px]">
-              {paymentMethod === "COD" ? "Cash on Delivery (Pending)" : "Verified & Paid via Razorpay"}
+              {verifiedOrder.paymentStatus === "SUCCESS" ? "Paid" : verifiedOrder.paymentStatus.replaceAll("_", " ")}
             </span>
           </div>
         </div>
@@ -49,15 +74,15 @@ function OrderSuccessContent() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
           <div>
             <span className="text-charcoal-100 block mb-0.5">Estimated Dispatch</span>
-            <span className="font-semibold text-charcoal-900">Within 24-48 Hours</span>
+            <span className="font-semibold text-charcoal-900">Pending fulfillment</span>
           </div>
           <div>
             <span className="text-charcoal-100 block mb-0.5">Expected Delivery</span>
-            <span className="font-semibold text-charcoal-900">3-5 Business Days</span>
+            <span className="font-semibold text-charcoal-900">Shown after dispatch</span>
           </div>
           <div>
             <span className="text-charcoal-100 block mb-0.5">Logistics Partner</span>
-            <span className="font-semibold text-charcoal-900">Shiprocket Express</span>
+            <span className="font-semibold text-charcoal-900">{verifiedOrder.courierPartner || "Not assigned"}</span>
           </div>
         </div>
       </div>

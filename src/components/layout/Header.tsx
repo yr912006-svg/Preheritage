@@ -10,9 +10,7 @@ import {
   User,
   Menu,
   X,
-  ChevronDown,
   Sparkles,
-  MapPin,
 } from "lucide-react";
 import Logo from "./Logo";
 import { useCart } from "@/context/CartContext";
@@ -28,7 +26,6 @@ export const Header: React.FC = () => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isRegionDropdownOpen, setIsRegionDropdownOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -54,101 +51,44 @@ export const Header: React.FC = () => {
             : "bg-ivory-100 py-4 border-b border-ivory-200"
         }`}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            {/* Left: Mobile Menu Trigger & Main Desktop Nav */}
-            <div className="flex items-center gap-6">
+        <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1 sm:gap-x-2">
+            {/* Left: Category menu */}
+            <div className="flex min-w-0 items-center justify-self-start">
               <button
-                onClick={() => setIsMobileMenuOpen(true)}
-                className="lg:hidden text-charcoal-800 hover:text-gold-600 transition-colors p-1"
+                onClick={() => setIsMobileMenuOpen((open) => !open)}
+                className="text-charcoal-800 hover:text-gold-600 transition-colors p-1"
                 aria-label="Open navigation menu"
+                aria-expanded={isMobileMenuOpen}
+                aria-controls="preheritage-category-menu"
               >
                 <Menu className="w-6 h-6" />
               </button>
-
-              <nav className="hidden lg:flex items-center gap-6 text-xs uppercase tracking-[0.16em] font-medium text-charcoal-800">
-                <Link href="/shop" className="hover:text-gold-600 transition-colors py-1">
-                  All Collections
-                </Link>
-                <Link href="/shop?category=sarees" className="hover:text-gold-600 transition-colors py-1">
-                  Sarees
-                </Link>
-                <Link href="/shop?category=kurtas" className="hover:text-gold-600 transition-colors py-1">
-                  Kurtas
-                </Link>
-                <Link href="/shop?category=lehengas" className="hover:text-gold-600 transition-colors py-1">
-                  Lehengas
-                </Link>
-                <Link href="/shop?category=handloom" className="hover:text-gold-600 transition-colors py-1">
-                  Handloom
-                </Link>
-
-                {/* Region Mega Dropdown */}
-                <div
-                  className="relative"
-                  onMouseEnter={() => setIsRegionDropdownOpen(true)}
-                  onMouseLeave={() => setIsRegionDropdownOpen(false)}
-                >
-                  <button className="flex items-center gap-1 hover:text-gold-600 transition-colors py-1">
-                    <span>By Region</span>
-                    <ChevronDown className="w-3 h-3" />
-                  </button>
-
-                  {isRegionDropdownOpen && (
-                    <div className="absolute top-full left-0 w-80 bg-ivory-50 shadow-2xl border border-ivory-300 p-4 rounded-sm animate-in fade-in slide-in-from-top-1 duration-200 z-50">
-                      <div className="text-[10px] tracking-widest uppercase text-gold-600 font-bold mb-3 flex items-center gap-1.5 border-b border-ivory-200 pb-2">
-                        <MapPin className="w-3 h-3 text-gold-500" />
-                        <span>Indian Weaving Clusters</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs normal-case tracking-normal">
-                        {REGIONS.map((r) => (
-                          <Link
-                            key={r.id}
-                            href={`/shop?region=${r.slug}`}
-                            className="p-2 hover:bg-ivory-200 rounded transition-colors group"
-                          >
-                            <span className="font-serif font-semibold text-charcoal-900 group-hover:text-gold-700 block">
-                              {r.name}
-                            </span>
-                            <span className="text-[11px] text-charcoal-100 block truncate">
-                              {r.craft}
-                            </span>
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <Link href="/journal" className="hover:text-gold-600 transition-colors py-1">
-                  Cultural Journal
-                </Link>
-              </nav>
             </div>
 
             {/* Center: Brand Identity Logo */}
-            <div className="flex-1 flex justify-center lg:flex-initial">
-              <Logo />
+            <div className="flex justify-center justify-self-center">
+              <Logo compactOnMobile />
             </div>
 
             {/* Right: Search, Wishlist, Account, Cart */}
-            <div className="flex items-center gap-3 sm:gap-5">
+            <div className="flex items-center justify-self-end gap-0.5 sm:gap-3 lg:gap-5">
               {/* Search Button */}
               <button
                 onClick={() => setIsSearchOpen(true)}
-                className="text-charcoal-800 hover:text-gold-600 transition-colors p-1"
+                className="text-charcoal-800 hover:text-gold-600 transition-colors p-0.5 sm:p-1"
                 aria-label="Search store"
               >
-                <Search className="w-5 h-5" />
+                <Search className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
 
               {/* Wishlist */}
               <Link
                 href="/account/wishlist"
-                className="relative text-charcoal-800 hover:text-gold-600 transition-colors p-1"
+                className="relative inline-flex text-charcoal-800 hover:text-gold-600 transition-colors p-0.5 sm:p-1"
                 aria-label="View wishlist"
               >
-                <Heart className="w-5 h-5" />
+                <Heart className="w-4 h-4 sm:w-5 sm:h-5" />
                 {wishlist.length > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-heritage-crimson text-white rounded-full text-[10px] font-bold flex items-center justify-center">
                     {wishlist.length}
@@ -159,19 +99,19 @@ export const Header: React.FC = () => {
               {/* Account */}
               <Link
                 href="/account"
-                className="text-charcoal-800 hover:text-gold-600 transition-colors p-1"
+                className="inline-flex text-charcoal-800 hover:text-gold-600 transition-colors p-0.5 sm:p-1"
                 aria-label="Account profile"
               >
-                <User className="w-5 h-5" />
+                <User className="w-4 h-4 sm:w-5 sm:h-5" />
               </Link>
 
               {/* Cart Drawer Trigger */}
               <button
                 onClick={() => setIsCartOpen(true)}
-                className="relative text-charcoal-800 hover:text-gold-600 transition-colors p-1"
+                className="relative text-charcoal-800 hover:text-gold-600 transition-colors p-0.5 sm:p-1"
                 aria-label="Shopping bag"
               >
-                <ShoppingBag className="w-5 h-5" />
+                <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
                 {totalItemsCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-gold-600 text-white rounded-full text-[10px] font-bold flex items-center justify-center">
                     {totalItemsCount}
@@ -246,7 +186,7 @@ export const Header: React.FC = () => {
 
       {/* Mobile Menu Drawer */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden">
+        <div id="preheritage-category-menu" className="fixed inset-0 z-50 flex">
           <div
             className="fixed inset-0 bg-charcoal-900/60 backdrop-blur-sm"
             onClick={() => setIsMobileMenuOpen(false)}
@@ -258,6 +198,7 @@ export const Header: React.FC = () => {
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="p-1 text-charcoal-200 hover:text-charcoal-900"
+                  aria-label="Close navigation menu"
                 >
                   <X className="w-6 h-6" />
                 </button>
@@ -321,6 +262,13 @@ export const Header: React.FC = () => {
                     className="block text-charcoal-300 hover:text-gold-600"
                   >
                     Track My Order
+                  </Link>
+                  <Link
+                    href="/account/wishlist"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="block text-charcoal-300 hover:text-gold-600"
+                  >
+                    Wishlist
                   </Link>
                 </div>
               </div>

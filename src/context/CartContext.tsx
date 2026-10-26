@@ -6,6 +6,7 @@ import { ProductItem } from "@/lib/sample-data";
 export interface CartItem {
   id: string; // unique item id (productId + size + color)
   productId: string;
+  variantId?: string;
   title: string;
   slug: string;
   price: number;
@@ -56,6 +57,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     discount: number;
     type: "PERCENT" | "FIXED";
   } | null>(null);
+  const [storageReady, setStorageReady] = useState(false);
+  const [accountCart, setAccountCart] = useState(false);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -70,11 +73,63 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (coupon) setAppliedCoupon(JSON.parse(coupon));
     } catch (e) {
       console.error("Failed to load cart from storage", e);
+    } finally {
+      setStorageReady(true);
     }
   }, []);
 
+  useEffect(() => {
+    if (!storageReady) return;
+    let active = true;
+    void fetch("/api/account/cart").then(async (response) => {
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!active) return;
+      if (data.items?.length) {
+        const accountItems: CartItem[] = data.items.map((item: any) => ({
+          id: `${item.productId}-${item.size}-${item.color}`,
+          productId: item.productId,
+          variantId: item.variantId || undefined,
+          title: item.product.title,
+          slug: item.product.slug,
+          price: item.price,
+          mrp: item.product.mrp,
+          image: item.product.images[0] || "",
+          size: item.size,
+          color: item.color,
+          quantity: item.quantity,
+          maxStock: item.maxStock,
+        }));
+
+        // Keep items already restored from this browser while merging the
+        // account cart. Prefer the greater quantity for matching variants.
+        setCart((localItems) => {
+          const mergedItems = new Map(accountItems.map((item) => [item.id, item]));
+          for (const localItem of localItems) {
+            const accountItem = mergedItems.get(localItem.id);
+            if (accountItem) {
+              mergedItems.set(localItem.id, {
+                ...accountItem,
+                quantity: Math.min(
+                  Math.max(accountItem.quantity, localItem.quantity),
+                  accountItem.maxStock
+                ),
+              });
+            } else {
+              mergedItems.set(localItem.id, localItem);
+            }
+          }
+          return Array.from(mergedItems.values());
+        });
+      }
+      setAccountCart(true);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [storageReady]);
+
   // Save to localStorage on change
   useEffect(() => {
+    if (!storageReady) return;
     try {
       localStorage.setItem("preheritage_cart", JSON.stringify(cart));
       localStorage.setItem("preheritage_saved_later", JSON.stringify(savedForLater));
@@ -86,7 +141,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.error("Failed to save cart to storage", e);
     }
-  }, [cart, savedForLater, appliedCoupon]);
+  }, [cart, savedForLater, appliedCoupon, storageReady]);
 
   const addToCart = (
     product: ProductItem,
@@ -96,7 +151,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ) => {
     const chosenSize = size || product.sizes[0] || "Standard";
     const chosenColor = color || product.colors[0]?.name || "Original";
+    const variant = product.variants?.find((item) => item.size === chosenSize && item.color === chosenColor);
     const itemId = `${product.id}-${chosenSize}-${chosenColor}`;
+    const maxStock = variant?.stock ?? product.stock;
 
     setCart((prevCart) => {
       const existing = prevCart.find((item) => item.id === itemId);
@@ -112,23 +169,28 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         {
           id: itemId,
           productId: product.id,
+            variantId: variant?.id,
           title: product.title,
           slug: product.slug,
-          price: product.price,
+            price: product.price + (variant?.additionalPrice || 0),
           mrp: product.mrp,
-          image: product.images[0],
+            image: product.images[0] || "",
           size: chosenSize,
           color: chosenColor,
-          quantity,
-          maxStock: product.stock,
+            quantity: Math.min(quantity, maxStock),
+            maxStock,
         },
       ];
     });
+
+    if (accountCart && variant?.stock !== 0) void fetch("/api/account/cart", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: product.id, variantId: variant?.id, quantity }) }).catch(() => undefined);
 
     setIsCartOpen(true);
   };
 
   const removeFromCart = (itemId: string) => {
+    const removed = cart.find((item) => item.id === itemId);
+    if (accountCart && removed) void fetch("/api/account/cart", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: removed.productId, variantId: removed.variantId }) }).catch(() => undefined);
     setCart((prev) => prev.filter((item) => item.id !== itemId));
   };
 
@@ -137,6 +199,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       removeFromCart(itemId);
       return;
     }
+    const changed = cart.find((item) => item.id === itemId);
+    if (accountCart && changed) void fetch("/api/account/cart", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: changed.productId, variantId: changed.variantId, quantity: Math.min(quantity, changed.maxStock) }) }).catch(() => undefined);
     setCart((prev) =>
       prev.map((item) =>
         item.id === itemId
@@ -149,6 +213,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const saveForLater = (itemId: string) => {
     const item = cart.find((i) => i.id === itemId);
     if (!item) return;
+    if (accountCart) void fetch("/api/account/cart", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: item.productId, variantId: item.variantId }) }).catch(() => undefined);
     setCart((prev) => prev.filter((i) => i.id !== itemId));
     setSavedForLater((prev) => [...prev, item]);
   };
@@ -161,6 +226,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const clearCart = () => {
+    if (accountCart) void fetch("/api/account/cart", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clear: true }) }).catch(() => undefined);
     setCart([]);
     setAppliedCoupon(null);
   };

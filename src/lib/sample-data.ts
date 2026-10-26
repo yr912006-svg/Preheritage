@@ -27,6 +27,7 @@ export interface ProductItem {
   sizeFitGuide: string;
   sizes: string[];
   colors: { name: string; hex: string }[];
+  variants?: { id: string; size: string; color: string; colorCode?: string; stock: number; additionalPrice: number }[];
   stock: number;
   isFeatured?: boolean;
   isNewArrival?: boolean;
