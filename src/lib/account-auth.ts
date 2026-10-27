@@ -3,22 +3,39 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { adminSessionStatus } from "@/lib/admin-session-access";
 
-export async function getCustomerUser() {
-  const session = await getServerSession(authOptions);
+export type CustomerUserResolution =
+  | { status: "authorized"; user: NonNullable<Awaited<ReturnType<typeof findActiveCustomer>>> }
+  | { status: "unauthenticated" }
+  | { status: "unavailable" };
+
+async function findActiveCustomer(id: string) {
+  return prisma.user.findFirst({
+    where: { id, role: "CUSTOMER", isActive: true },
+    select: { id: true, name: true, email: true, phone: true, gender: true, dob: true, image: true },
+  });
+}
+
+export async function resolveCustomerUser(): Promise<CustomerUserResolution> {
+  let session;
+  try {
+    session = await getServerSession(authOptions);
+  } catch {
+    return { status: "unavailable" };
+  }
   const identity = session?.user as { id?: string; role?: string; adminRole?: string } | undefined;
-  if (!identity?.id || identity.role !== "CUSTOMER" || identity.adminRole) return null;
+  if (!identity?.id || identity.role !== "CUSTOMER" || identity.adminRole) return { status: "unauthenticated" };
 
   try {
-    const user = await prisma.user.findFirst({
-      where: { id: identity.id, role: "CUSTOMER", isActive: true },
-      select: { id: true, name: true, email: true, phone: true, gender: true, dob: true, image: true },
-    });
-    return user ?? null;
+    const user = await findActiveCustomer(identity.id);
+    return user ? { status: "authorized", user } : { status: "unauthenticated" };
   } catch {
-    // Treat an unverifiable session like an expired session. Callers return a
-    // login redirect or a JSON 401 rather than exposing database errors.
-    return null;
+    return { status: "unavailable" };
   }
+}
+
+export async function getCustomerUser() {
+  const result = await resolveCustomerUser();
+  return result.status === "authorized" ? result.user : null;
 }
 
 export async function requireAdminUser() {

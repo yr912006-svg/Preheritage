@@ -1,17 +1,19 @@
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
-import { getCustomerUser } from "@/lib/account-auth";
+import { resolveCustomerUser } from "@/lib/account-auth";
 import { AccountPageFrame } from "@/components/account/AccountNav";
 import { AccountSettings } from "@/components/account/AccountSettings";
+import { AccountUnavailable } from "@/components/account/AccountNav";
+import { loadAccountOverview } from "@/lib/account-overview";
 
 export default async function CustomerAccountPage() {
-  const user = await getCustomerUser();
-  if (!user) redirect("/login?callbackUrl=%2Faccount&reason=customer-required");
-  const [addresses, orderCount, wishlistCount] = await Promise.all([
-    prisma.address.findMany({ where: { userId: user.id }, orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }] }),
-    prisma.order.count({ where: { userId: user.id } }),
-    prisma.wishlistItem.count({ where: { userId: user.id } }),
-  ]);
+  const resolution = await resolveCustomerUser();
+  if (resolution.status === "unavailable") return <AccountUnavailable />;
+  if (resolution.status !== "authorized") redirect("/login?callbackUrl=%2Faccount&reason=customer-required");
+  const { user } = resolution;
+  const overview = await loadAccountOverview(user.id, prisma);
+  if (!overview) return <AccountUnavailable />;
+  const { addresses, orderCount, wishlistCount } = overview;
 
   return (
     <AccountPageFrame active="/account" title={`Welcome${user.name ? `, ${user.name.split(" ")[0]}` : ""}`}>

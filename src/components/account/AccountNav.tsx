@@ -40,3 +40,17 @@ export function AccountPageFrame({ active, title, children }: { active: string; 
     </div>
   );
 }
+
+export function AccountUnavailable() {
+  return (
+    <div className="min-h-[70vh] bg-ivory-100 py-16">
+      <div className="mx-auto max-w-3xl px-4 sm:px-6">
+        <section role="alert" className="rounded-sm border border-ivory-300 bg-ivory-50 p-8 text-center shadow-sm sm:p-12">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gold-700">Private Patron Account</p>
+          <h1 className="mt-3 font-serif text-2xl font-bold text-charcoal-900">Your account is temporarily unavailable</h1>
+          <p className="mt-3 text-sm text-charcoal-500">We couldn’t load your account details right now. Please refresh in a moment.</p>
+        </section>
+      </div>
+    </div>
+  );
+}
