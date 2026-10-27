@@ -69,7 +69,12 @@ export const authOptions: NextAuthOptions = {
             role: user.role,
             image: user.image,
           };
-        } catch { return null; }
+        } catch {
+          // Keep infrastructure failures distinct from an ordinary bad password.
+          // The client maps this stable code to a generic retry message; no database
+          // details or credentials are sent to the browser.
+          throw new Error("AuthenticationUnavailable");
+        }
       },
     }),
 
@@ -128,12 +133,45 @@ export const authOptions: NextAuthOptions = {
   ],
 
   callbacks: {
+    async signIn({ user, account, profile }) {
+      if (account?.provider !== "google") return true;
+      const email = user.email?.trim().toLowerCase();
+      const googleProfile = profile as { email_verified?: boolean } | undefined;
+      if (!email || googleProfile?.email_verified !== true) return false;
+      try {
+        const customer = await prisma.user.findUnique({ where: { email }, select: { role: true, isActive: true } });
+        return Boolean(customer?.isActive && customer.role === "CUSTOMER");
+      } catch {
+        return false;
+      }
+    },
     async jwt({ token, user, account }) {
       if (user) {
-        token.id = user.id;
-        token.role = (user as any).role || "CUSTOMER";
-        token.phone = (user as any).phone;
-        token.adminRole = (user as any).adminRole;
+        if (account?.provider === "google") {
+          const email = user.email?.trim().toLowerCase();
+          let customer: any = null;
+          try {
+            if (email) customer = await prisma.user.findUnique({ where: { email }, select: { id: true, role: true, phone: true, image: true, isActive: true } });
+          } catch {
+            customer = null;
+          }
+          if (!customer?.isActive || customer.role !== "CUSTOMER") {
+            token.id = undefined;
+            token.role = "UNLINKED";
+            token.adminRole = undefined;
+          } else {
+            token.id = customer.id;
+            token.role = customer.role;
+            token.phone = customer.phone;
+            token.image = customer.image;
+            token.adminRole = undefined;
+          }
+        } else {
+          token.id = user.id;
+          token.role = (user as any).role || "UNLINKED";
+          token.phone = (user as any).phone;
+          token.adminRole = (user as any).adminRole;
+        }
       }
       return token;
     },

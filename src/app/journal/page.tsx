@@ -30,7 +30,7 @@ const articles = [
     title: "Alchemy of Desert Indigo: How Kutch Ajrakh Masters Read the Stars",
     region: "Kutch, Gujarat",
     date: "08 October 2026",
-    image: "https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&q=80&w=900",
+    image: "https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&q=80&w=900",
     excerpt: "16 stages of washing, fermenting iron rust, tamarind gum resist, and organic madder root dyeing that outlives synthetic pigments.",
   },
 ];

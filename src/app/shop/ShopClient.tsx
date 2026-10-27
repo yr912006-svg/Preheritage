@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, Suspense } from "react";
+import React, { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { SlidersHorizontal, Search, X, Check, ChevronDown, RotateCcw } from "lucide-react";
 import ProductCard from "@/components/shop/ProductCard";
@@ -14,6 +14,13 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
   const initialQuery = searchParams.get("q") || "";
   const initialBadge = searchParams.get("badge") || "";
 
+  useEffect(() => {
+    setSelectedCategory(searchParams.get("category") || "");
+    setSelectedRegion(searchParams.get("region") || "");
+    setSearchQuery(searchParams.get("q") || "");
+    setSelectedBadge(searchParams.get("badge") || "");
+  }, [searchParams]);
+
   // Filter states
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [selectedRegion, setSelectedRegion] = useState(initialRegion);
@@ -25,7 +32,9 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
   const [sortBy, setSortBy] = useState<string>("FEATURED");
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
-  const allSizes = ["Free Size", "S", "M", "L", "XL", "XXL"];
+  const allSizes = useMemo(() => Array.from(new Set(products.flatMap((product) => product.sizes))).sort((a, b) => a.localeCompare(b)), [products]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 12;
 
   // Filtering Logic
   const filteredProducts = useMemo(() => {
@@ -37,7 +46,13 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
           product.title.toLowerCase().includes(q) ||
           product.shortDesc.toLowerCase().includes(q) ||
           product.category.toLowerCase().includes(q) ||
+          product.description.toLowerCase().includes(q) ||
+          product.culturalStory.toLowerCase().includes(q) ||
+          product.fabricDetails.toLowerCase().includes(q) ||
           product.state.toLowerCase().includes(q) ||
+          product.region.toLowerCase().includes(q) ||
+          product.sizes.some((size) => size.toLowerCase().includes(q)) ||
+          product.colors.some((color) => color.name.toLowerCase().includes(q)) ||
           product.sku.toLowerCase().includes(q);
         if (!matches) return false;
       }
@@ -77,7 +92,10 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
       if (sortBy === "PRICE_ASC") return a.price - b.price;
       if (sortBy === "PRICE_DESC") return b.price - a.price;
       if (sortBy === "RATING") return b.rating - a.rating;
-      if (sortBy === "NEWEST") return (b.isNewArrival ? 1 : 0) - (a.isNewArrival ? 1 : 0);
+      if (sortBy === "NEWEST") {
+        const dateDifference = new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        return dateDifference || (b.isNewArrival ? 1 : 0) - (a.isNewArrival ? 1 : 0);
+      }
       return (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0);
     });
   }, [
@@ -91,6 +109,10 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
     priceRange,
     sortBy,
   ]);
+
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, selectedCategory, selectedRegion, selectedBadge, selectedSize, selectedColor, priceRange, sortBy]);
+  const pageCount = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
+  const pagedProducts = filteredProducts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const clearAllFilters = () => {
     setSelectedCategory("");
@@ -269,7 +291,7 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
                         : "text-charcoal-200 hover:text-charcoal-900"
                     }`}
                   >
-                    {cat.name}
+                    <span className="flex items-center justify-between gap-3"><span>{cat.name}</span>{!loadError && <span className="text-[10px] text-charcoal-100">{products.filter((product) => product.category === cat.slug).length}</span>}</span>
                   </button>
                 ))}
               </div>
@@ -373,15 +395,20 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
               <div>
                 <div className="flex justify-between items-center text-xs text-charcoal-100 mb-4 font-light">
                   <span>
-                    Showing <strong>{filteredProducts.length}</strong> handcrafted {filteredProducts.length === 1 ? "piece" : "pieces"}
+                    Showing <strong>{filteredProducts.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredProducts.length)}</strong> of <strong>{filteredProducts.length}</strong> handcrafted {filteredProducts.length === 1 ? "piece" : "pieces"}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {filteredProducts.map((product) => (
+                  {pagedProducts.map((product) => (
                     <ProductCard key={product.id} product={product} />
                   ))}
                 </div>
+                {pageCount > 1 && <nav aria-label="Catalog pages" className="mt-8 flex items-center justify-center gap-2">
+                  <button type="button" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1} className="border border-ivory-300 bg-ivory-50 px-3 py-2 text-xs disabled:opacity-40">Previous</button>
+                  <span className="px-3 text-xs text-charcoal-500">Page {currentPage} of {pageCount}</span>
+                  <button type="button" onClick={() => setCurrentPage((page) => Math.min(pageCount, page + 1))} disabled={currentPage === pageCount} className="border border-ivory-300 bg-ivory-50 px-3 py-2 text-xs disabled:opacity-40">Next</button>
+                </nav>}
               </div>
             )}
           </div>

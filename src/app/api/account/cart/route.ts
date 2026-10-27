@@ -6,7 +6,10 @@ import { getCustomerUser } from "@/lib/account-auth";
 async function getAvailable(productId: string, variantId: string | null) {
   const product = await prisma.product.findFirst({ where: { id: productId, status: "ACTIVE" }, include: { variants: true } });
   if (!product) return null;
-  if (!variantId) return { product, stock: product.stock, variant: null as null | { id: string; size: string; color: string; additionalPrice: number } };
+  if (!variantId) {
+    if (product.variants.length > 0) return null;
+    return { product, stock: product.stock, variant: null as null | { id: string; size: string; color: string; additionalPrice: number } };
+  }
   const variant = product.variants.find((entry) => entry.id === variantId);
   return variant ? { product, stock: variant.stock, variant } : null;
 }
@@ -19,8 +22,8 @@ export async function GET() {
     return NextResponse.json({ items: rows.map((row) => ({
       id: row.id, productId: row.productId, variantId: row.variantId, quantity: row.quantity,
       product: toProductItem(row.product), size: row.variant?.size || "Free Size", color: row.variant?.color || "Original",
-      price: row.product.price + (row.variant?.additionalPrice || 0),
-      maxStock: row.variant?.stock ?? row.product.stock,
+      price: Number(row.product.price) + Number(row.variant?.additionalPrice || 0),
+      maxStock: row.product.variants.length > 0 && !row.variantId ? 0 : row.variant?.stock ?? row.product.stock,
     })) });
   } catch (error) {
     console.error("Customer cart lookup failed:", error);

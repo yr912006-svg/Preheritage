@@ -1,24 +1,40 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, Suspense, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Lock, Mail, ArrowRight, Smartphone, AlertCircle } from "lucide-react";
 import Logo from "@/components/layout/Logo";
+import { safeAccountReturnPath } from "@/lib/customer-route-access";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/account";
+  const callbackUrl = safeAccountReturnPath(searchParams.get("callbackUrl"));
+  const customerRequired = searchParams.get("reason") === "customer-required";
+  const googleAccessDenied = searchParams.get("error") === "AccessDenied";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+  const submissionInProgress = useRef(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/auth/providers", { signal: controller.signal, cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((providers) => setGoogleEnabled(Boolean(providers?.google)))
+      .catch(() => setGoogleEnabled(false));
+    return () => controller.abort();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submissionInProgress.current) return;
+    submissionInProgress.current = true;
     setIsLoading(true);
     setError("");
 
@@ -29,20 +45,29 @@ function LoginForm() {
         redirect: false,
       });
 
-      if (res?.error) {
-        setError(res.error);
-        setIsLoading(false);
-      } else {
-        router.push(callbackUrl);
+      if (res?.ok && !res.error) {
+        router.replace(callbackUrl);
+        return;
       }
-    } catch (err: any) {
-      setError(err.message || "Failed to sign in");
+      if (res?.error === "CredentialsSignin") {
+        setError("Email or password could not be verified. Please try again.");
+      } else if (res?.error === "AuthenticationUnavailable" || res?.error === "Callback") {
+        setError("Sign in is temporarily unavailable. Please try again shortly.");
+      } else if (res?.error === "AccessDenied") {
+        setError("This account is not currently permitted to sign in.");
+      } else {
+        setError("We could not complete sign in. Please try again.");
+      }
+    } catch {
+      setError("Unable to reach sign in right now. Check your connection and try again.");
+    } finally {
+      submissionInProgress.current = false;
       setIsLoading(false);
     }
   };
 
   const handleGoogleSignIn = () => {
-    signIn("google", { callbackUrl });
+    if (googleEnabled) void signIn("google", { callbackUrl });
   };
 
   return (
@@ -64,8 +89,14 @@ function LoginForm() {
         </div>
       )}
 
+      {(customerRequired || googleAccessDenied) && !error && (
+        <div className="mb-6 rounded border border-gold-300 bg-gold-50 p-3 text-xs text-charcoal-700" role="status">
+          Please sign in with an active customer account to view your account details.
+        </div>
+      )}
+
       {/* Google OAuth Login */}
-      <button
+      {googleEnabled && <button
         onClick={handleGoogleSignIn}
         type="button"
         className="w-full py-2.5 px-4 bg-white hover:bg-ivory-100 border border-ivory-300 rounded text-xs font-semibold text-charcoal-800 flex items-center justify-center gap-3 transition-colors mb-4 shadow-sm"
@@ -89,11 +120,11 @@ function LoginForm() {
           />
         </svg>
         <span>Continue with Google</span>
-      </button>
+      </button>}
 
       {/* Mobile OTP Login switch */}
       <Link
-        href="/otp-login"
+        href={`/otp-login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
         className="w-full py-2.5 px-4 bg-ivory-100 hover:bg-ivory-200 border border-ivory-300 rounded text-xs font-semibold text-charcoal-800 flex items-center justify-center gap-2 transition-colors mb-6"
       >
         <Smartphone className="w-4 h-4 text-gold-600" />
@@ -160,7 +191,7 @@ function LoginForm() {
 
       <div className="mt-8 pt-6 border-t border-ivory-200 text-center text-xs text-charcoal-100">
         <span>Don&apos;t have an account yet? </span>
-        <Link href="/register" className="text-gold-700 hover:text-gold-900 font-bold underline">
+        <Link href={`/register?callbackUrl=${encodeURIComponent(callbackUrl)}`} className="text-gold-700 hover:text-gold-900 font-bold underline">
           Register as a Patron
         </Link>
       </div>

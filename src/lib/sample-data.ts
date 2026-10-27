@@ -6,6 +6,7 @@ export interface ProductItem {
   title: string;
   slug: string;
   sku: string;
+  createdAt?: string;
   category: string;
   subcategory?: string;
   collection?: string;
@@ -27,8 +28,9 @@ export interface ProductItem {
   sizeFitGuide: string;
   sizes: string[];
   colors: { name: string; hex: string }[];
-  variants?: { id: string; size: string; color: string; colorCode?: string; stock: number; additionalPrice: number }[];
+  variants?: { id: string; size: string; color: string; colorCode?: string; stock: number; additionalPrice: number; isActive?: boolean }[];
   stock: number;
+  status?: string;
   isFeatured?: boolean;
   isNewArrival?: boolean;
   isBestSeller?: boolean;
@@ -41,7 +43,6 @@ export const CATEGORIES = [
     slug: "sarees",
     description: "Six yards of unstitched poetry woven across the sacred looms of India.",
     image: "https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&q=80&w=900",
-    itemCount: 48,
   },
   {
     id: "kurtas",
@@ -49,7 +50,6 @@ export const CATEGORIES = [
     slug: "kurtas",
     description: "Breathable silks and handspun khadi tailored for modern poise.",
     image: "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=900",
-    itemCount: 36,
   },
   {
     id: "lehengas",
@@ -57,7 +57,6 @@ export const CATEGORIES = [
     slug: "lehengas",
     description: "Regal silhouettes adorned with zardozi, gota patti, and hand-embroidery.",
     image: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=900",
-    itemCount: 24,
   },
   {
     id: "handloom",
@@ -65,7 +64,6 @@ export const CATEGORIES = [
     slug: "handloom",
     description: "Pure GI-tagged heritage weaves from master artisan clusters.",
     image: "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?auto=format&fit=crop&q=80&w=900",
-    itemCount: 42,
   },
   {
     id: "handicrafts",
@@ -73,7 +71,6 @@ export const CATEGORIES = [
     slug: "handicrafts",
     description: "Hand-chiseled brass, dhokra bell metal, and wooden heirloom artifacts.",
     image: "https://images.unsplash.com/photo-1582533561751-ef6f6ab93a2e?auto=format&fit=crop&q=80&w=900",
-    itemCount: 29,
   },
   {
     id: "posters",
@@ -81,7 +78,6 @@ export const CATEGORIES = [
     slug: "posters",
     description: "Limited-edition archival prints depicting India's timeless architectural marvels.",
     image: "https://images.unsplash.com/photo-1524492412937-b28074a5d7da?auto=format&fit=crop&q=80&w=900",
-    itemCount: 18,
   },
   {
     id: "accessories",
@@ -89,7 +85,6 @@ export const CATEGORIES = [
     slug: "accessories",
     description: "Pure Pashmina wraps, potlis, and handcrafted antique gold jewelry.",
     image: "https://images.unsplash.com/photo-1535295972055-1c762f4483e5?auto=format&fit=crop&q=80&w=900",
-    itemCount: 31,
   },
 ];
 
@@ -128,7 +123,7 @@ export const REGIONS = [
     slug: "gujarat",
     craft: "Double Ikkat Patola & Ajrakh",
     story: "Ancient block printers and silk weavers using organic indigo, madder root, and intricate double-warp resist dyeing that lasts generations.",
-    image: "https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&q=80&w=900",
+    image: "https://images.unsplash.com/photo-1561361513-2d000a50f0dc?auto=format&fit=crop&q=80&w=900",
   },
   {
     id: "bengal",
@@ -169,7 +164,6 @@ export const SAMPLE_PRODUCTS: ProductItem[] = [
     images: [
       "https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&q=80&w=1200",
       "https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?auto=format&fit=crop&q=80&w=1200",
-      "https://images.unsplash.com/photo-1610030469668-93510cb67655?auto=format&fit=crop&q=80&w=1200",
     ],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-fashion-model-in-traditional-dress-41838-large.mp4",
     shortDesc: "Handwoven pure Katan silk saree featuring rare Kadwa technique with electroplated antique gold zari.",
@@ -205,7 +199,6 @@ export const SAMPLE_PRODUCTS: ProductItem[] = [
     badge: "NEW",
     images: [
       "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=1200",
-      "https://images.unsplash.com/photo-1583391733975-021b033e0d8b?auto=format&fit=crop&q=80&w=1200",
     ],
     shortDesc: "Whisper-light Chanderi silhouette adorned with dabka, french knots, and semi-precious bead embroidery.",
     description: "Tailored to modern relaxed fit while honoring the translucent delicacy of legendary Chanderi weaves. Features a comfortable mandarin collar, deep pockets, and paired with straight-cut mulberry silk trousers.",
@@ -307,8 +300,7 @@ export const SAMPLE_PRODUCTS: ProductItem[] = [
     reviewCount: 41,
     badge: "SALE",
     images: [
-      "https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&q=80&w=1200",
-      "https://images.unsplash.com/photo-1583391733975-021b033e0d8b?auto=format&fit=crop&q=80&w=1200",
+      "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=1200",
     ],
     shortDesc: "16-stage naturally dyed resist block print on handloom modal silk.",
     description: "Ajrakh is an ancient craft celebrating geometric symmetry and celestial astronomy. Dyed using pomegranate rinds, wild tamarind seed gum, fermented iron rust, and organic indigo extracts.",
@@ -341,7 +333,6 @@ export const SAMPLE_PRODUCTS: ProductItem[] = [
     badge: "LIMITED_EDITION",
     images: [
       "https://images.unsplash.com/photo-1582533561751-ef6f6ab93a2e?auto=format&fit=crop&q=80&w=1200",
-      "https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&q=80&w=1200",
     ],
     shortDesc: "Ancient lost-wax cast brass heirloom artifact depicting the Tree of Eternal Life.",
     description: "Handcrafted using the 4,000-year-old cire perdue (lost wax) metal casting technique dating back to the Dancing Girl of Mohenjo-daro. Every piece is entirely unique and non-replicable.",
@@ -401,7 +392,6 @@ export const SAMPLE_PRODUCTS: ProductItem[] = [
     badge: "BESTSELLER",
     images: [
       "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?auto=format&fit=crop&q=80&w=1200",
-      "https://images.unsplash.com/photo-1610030469668-93510cb67655?auto=format&fit=crop&q=80&w=1200",
     ],
     shortDesc: "Featherweight 200-count handspun cotton muslin with intricate supplementary weft lotus motifs.",
     description: "Known historically as 'Woven Air', Jamdani is declared a Masterpiece of the Oral and Intangible Heritage of Humanity by UNESCO. Each flower is inlaid by hand using fine bamboo shuttles as the loom advances thread by thread.",

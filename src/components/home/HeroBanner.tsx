@@ -76,7 +76,7 @@ export const HeroBanner: React.FC = () => {
           </div>
           <div>
             <span className="block font-serif text-xl sm:text-2xl font-bold text-gold-400">Global</span>
-            <span className="text-[11px] uppercase tracking-wider text-ivory-400">Insured Delivery</span>
+            <span className="text-[11px] uppercase tracking-wider text-ivory-400">Delivery Updates</span>
           </div>
         </div>
       </div>

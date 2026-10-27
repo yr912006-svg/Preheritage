@@ -6,11 +6,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Smartphone, Lock, ArrowRight, RotateCcw, AlertCircle, CheckCircle2 } from "lucide-react";
 import Logo from "@/components/layout/Logo";
+import { safeAccountReturnPath } from "@/lib/customer-route-access";
 
 function OtpLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/account";
+  const callbackUrl = safeAccountReturnPath(searchParams.get("callbackUrl"));
 
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
@@ -87,14 +88,14 @@ function OtpLoginForm() {
         redirect: false,
       });
 
-      if (res?.error) {
-        setError(res.error);
+      if (!res?.ok || res.error) {
+        setError("That verification code could not be confirmed. Request a new code and try again.");
         setIsLoading(false);
       } else {
-        router.push(callbackUrl);
+        router.replace(callbackUrl);
       }
     } catch (err: any) {
-      setError(err.message || "Verification failed");
+      setError("Sign in could not be completed. Please request a new code and try again.");
       setIsLoading(false);
     }
   };

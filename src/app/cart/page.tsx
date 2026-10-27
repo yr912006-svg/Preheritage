@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import {
   Trash2,
   Plus,
@@ -18,6 +17,7 @@ import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { formatPrice } from "@/lib/utils";
 import { SAMPLE_PRODUCTS } from "@/lib/sample-data";
+import { ProductImage } from "@/components/shop/ProductImage";
 
 export default function CartPage() {
   const {
@@ -100,12 +100,12 @@ export default function CartPage() {
                   <span className="text-charcoal-300">
                     {freeShippingRemaining > 0 ? (
                       <>
-                        Add <strong className="text-charcoal-900">{formatPrice(freeShippingRemaining)}</strong> more to unlock Complimentary Express Shipping across India
+                        Add <strong className="text-charcoal-900">{formatPrice(freeShippingRemaining)}</strong> more to unlock complimentary standard shipping
                       </>
                     ) : (
                       <span className="text-emerald-700 font-semibold flex items-center gap-1">
                         <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                        You have unlocked Complimentary Insured Express Shipping!
+                        You have unlocked complimentary standard shipping.
                       </span>
                     )}
                   </span>
@@ -125,7 +125,7 @@ export default function CartPage() {
                   <div key={item.id} className="py-6 first:pt-0 last:pb-0 flex flex-col sm:flex-row gap-5">
                     {/* Thumbnail */}
                     <div className="relative aspect-[3/4] w-24 sm:w-28 rounded bg-ivory-200 overflow-hidden shrink-0 border border-ivory-300">
-                      <Image src={item.image} alt={item.title} fill className="object-cover" />
+                      <ProductImage src={item.image} alt={item.title} />
                     </div>
 
                     {/* Details */}
@@ -218,7 +218,7 @@ export default function CartPage() {
                       <div key={sItem.id} className="py-4 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                           <div className="relative aspect-[3/4] w-12 rounded bg-ivory-200 overflow-hidden shrink-0">
-                            <Image src={sItem.image} alt={sItem.title} fill className="object-cover" />
+                            <ProductImage src={sItem.image} alt={sItem.title} />
                           </div>
                           <div>
                             <div className="font-serif text-sm font-semibold text-charcoal-900 line-clamp-1">
@@ -311,13 +311,13 @@ export default function CartPage() {
                   )}
 
                   <div className="flex justify-between">
-                    <span>Insured Domestic Shipping</span>
+                    <span>Domestic Shipping</span>
                     <span>{shippingCharge === 0 ? "FREE" : formatPrice(shippingCharge)}</span>
                   </div>
 
                   <div className="flex justify-between">
-                    <span>GST (5% Handloom Tax Included)</span>
-                    <span>{formatPrice(taxAmount)}</span>
+                    <span>Taxes</span>
+                    <span>Included in product prices</span>
                   </div>
 
                   <div className="pt-3 border-t border-ivory-300 flex justify-between items-baseline">

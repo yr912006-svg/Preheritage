@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getAdminUser } from "@/lib/account-auth";
+import { requireAdminUser } from "@/lib/account-auth";
 import { catalogProductInclude, toProductItem } from "@/lib/catalog";
 import { CATEGORIES, REGIONS } from "@/lib/sample-data";
 import { slugify } from "@/lib/utils";
 
 export async function GET() {
-  if (!await getAdminUser()) return NextResponse.json({ message: "Administrator access required." }, { status: 403 });
   try {
+    const access = await requireAdminUser();
+    if (!access.admin) return NextResponse.json({ message: access.status === 401 ? "Authentication required." : "Administrator access required." }, { status: access.status });
     const products = await prisma.product.findMany({ orderBy: { createdAt: "desc" }, include: catalogProductInclude });
     return NextResponse.json({ products: products.map((product) => ({ ...toProductItem(product), status: product.status })) });
   } catch (error) {
@@ -17,8 +18,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  if (!await getAdminUser()) return NextResponse.json({ message: "Administrator access required." }, { status: 403 });
   try {
+    const access = await requireAdminUser();
+    if (!access.admin) return NextResponse.json({ message: access.status === 401 ? "Authentication required." : "Administrator access required." }, { status: access.status });
     const body = await request.json();
     if (typeof body?.duplicateFromId === "string") {
       const source = await prisma.product.findUnique({ where: { id: body.duplicateFromId }, include: { images: true, variants: true } });
@@ -46,11 +48,17 @@ export async function POST(request: Request) {
     const price = Number(body?.price);
     const mrp = Number(body?.mrp);
     const stock = Number(body?.stock);
-    const imageUrl = typeof body?.imageUrl === "string" ? body.imageUrl.trim() : "";
+    const imageUrls: string[] = Array.isArray(body?.images) ? body.images.filter((value: unknown): value is string => typeof value === "string").map((value: string) => value.trim()) : (typeof body?.imageUrl === "string" ? [body.imageUrl.trim()] : []);
+    const primaryImageIndex = Number.isInteger(body?.primaryImageIndex) ? body.primaryImageIndex : 0;
+    const description = typeof body?.description === "string" ? body.description.trim() : "";
+    const submittedSizes: string[] = Array.isArray(body?.sizes)
+      ? body.sizes.filter((size: unknown): size is string => typeof size === "string").map((size: string) => size.trim()).filter(Boolean)
+      : [];
+    const sizes = submittedSizes.filter((size, index) => submittedSizes.indexOf(size) === index);
     if (title.length < 3 || title.length > 180 || !/^[A-Z0-9_-]{3,50}$/.test(sku) || !categorySlug || !regionSlug ||
         !Number.isFinite(price) || price <= 0 || !Number.isFinite(mrp) || mrp < price || !Number.isInteger(stock) || stock < 0 || stock > 100000 ||
-        !isAllowedImageUrl(imageUrl)) {
-      return NextResponse.json({ message: "Check the product title, SKU, category, region, price, stock, and image URL." }, { status: 400 });
+        description.length < 10 || description.length > 5000 || sizes.length > 12 || sizes.some((size: string) => size.length > 24) || !imageUrls.length || imageUrls.length > 12 || imageUrls.some((url) => !isAllowedImageUrl(url)) || primaryImageIndex < 0 || primaryImageIndex >= imageUrls.length) {
+      return NextResponse.json({ message: "Check the product title, SKU, category, region, price, stock, description, sizes, and image URL." }, { status: 400 });
     }
 
     const categoryInfo = CATEGORIES.find((category) => category.slug === categorySlug);
@@ -64,12 +72,13 @@ export async function POST(request: Request) {
     ]);
     const product = await prisma.product.create({ data: {
       title, slug, sku, categoryId: category.id, regionId: region.id,
-      shortDesc: optionalText(body.shortDesc, 500), description: optionalText(body.description, 5000) || title,
+      shortDesc: optionalText(body.shortDesc, 500), description,
       culturalStory: optionalText(body.culturalStory, 5000), fabricDetails: optionalText(body.fabricDetails, 1000),
       careInstructions: optionalText(body.careInstructions, 1000), price, mrp, costPrice: finiteOptionalNumber(body.costPrice),
       discount: mrp > price ? Math.round(((mrp - price) / mrp) * 100) : null,
       stock, lowStockAlert: 3, status: "ACTIVE", isFeatured: Boolean(body.isFeatured), isBestSeller: Boolean(body.isBestSeller),
-      images: { create: { url: imageUrl, altText: title, isPrimary: true, orderIndex: 0 } },
+      images: { create: imageUrls.map((url, orderIndex) => ({ url, altText: title, isPrimary: orderIndex === primaryImageIndex, orderIndex })) },
+      ...(sizes.length ? { variants: { create: sizes.map((size: string, index: number) => ({ sku: `VAR-${sku}-${index + 1}`, size, color: "Original", stock, additionalPrice: 0 })) } } : {}),
     }, include: catalogProductInclude });
     return NextResponse.json({ product: { ...toProductItem(product), status: product.status } }, { status: 201 });
   } catch (error: any) {
@@ -95,8 +104,9 @@ function finiteOptionalNumber(value: unknown) {
 }
 
 export async function DELETE(request: Request) {
-  if (!await getAdminUser()) return NextResponse.json({ message: "Administrator access required." }, { status: 403 });
   try {
+    const access = await requireAdminUser();
+    if (!access.admin) return NextResponse.json({ message: access.status === 401 ? "Authentication required." : "Administrator access required." }, { status: access.status });
     const body = await request.json();
     const productId = typeof body?.productId === "string" ? body.productId : "";
     if (!productId) return NextResponse.json({ message: "Product ID is required." }, { status: 400 });

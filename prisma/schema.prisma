@@ -711,7 +711,9 @@ model ReturnRequest {
 model SupportTicket {
   id         String        @id @default(cuid())
   userId     String?
+  guestName  String?
   guestEmail String?
+  guestPhone String?
   orderId    String?
   subject    String
   message    String        @db.Text

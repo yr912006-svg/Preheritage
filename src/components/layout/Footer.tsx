@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { MessageCircle, ShieldCheck, Mail, ArrowRight, Sparkles, Heart } from "lucide-react";
 import Logo from "./Logo";
@@ -10,6 +10,15 @@ export const Footer: React.FC = () => {
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
   const [subscribeError, setSubscribeError] = useState("");
+  const [razorpayEnabled, setRazorpayEnabled] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/payments/config", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((config) => {
+      if (active) setRazorpayEnabled(config?.razorpayEnabled === true);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,10 +237,10 @@ export const Footer: React.FC = () => {
             <div className="p-3 bg-charcoal-900 border border-charcoal-800 rounded space-y-2 text-[10px]">
               <div className="flex items-center gap-1.5 text-gold-400">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span className="font-semibold">Razorpay Verified Merchant</span>
+                <span className="font-semibold">{razorpayEnabled ? "Razorpay Secure Payments Available" : "Cash on Delivery Available"}</span>
               </div>
               <div className="text-ivory-400">
-                Shiprocket Integrated Logistics • 100% Insured Delivery
+                Delivery updates are shared after dispatch.
               </div>
             </div>
           </div>
@@ -245,8 +254,8 @@ export const Footer: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <span className="w-full text-center text-[10px] uppercase tracking-wider text-charcoal-300 sm:w-auto sm:text-left sm:mr-2">Secure Payments:</span>
-            {["UPI", "RuPay", "Visa", "Mastercard", "NetBanking", "COD"].map((method) => (
+            <span className="w-full text-center text-[10px] uppercase tracking-wider text-charcoal-300 sm:w-auto sm:text-left sm:mr-2">Payment options:</span>
+            {[...(razorpayEnabled ? ["Razorpay"] : []), "Cash on Delivery"].map((method) => (
               <span
                 key={method}
                 className="px-2 py-0.5 bg-charcoal-900 border border-charcoal-800 rounded text-[10px] text-ivory-300 font-mono"

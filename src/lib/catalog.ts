@@ -1,10 +1,11 @@
 import type { Prisma } from "@prisma/client";
 import type { ProductItem } from "@/lib/sample-data";
+import { getSellableStock } from "@/lib/inventory";
 
 export const catalogProductInclude = {
   category: true,
   region: true,
-  images: { orderBy: { orderIndex: "asc" as const } },
+  images: { orderBy: [{ isPrimary: "desc" as const }, { orderIndex: "asc" as const }] },
   variants: { orderBy: [{ size: "asc" as const }, { color: "asc" as const }] },
   reviews: { where: { status: "APPROVED" as const }, select: { rating: true } },
 } satisfies Prisma.ProductInclude;
@@ -24,6 +25,7 @@ export function toProductItem(product: CatalogProduct): ProductItem {
     title: product.title,
     slug: product.slug,
     sku: product.sku,
+    createdAt: product.createdAt.toISOString(),
     category: product.category.slug,
     collection: product.collectionId || undefined,
     region: product.region?.slug || "",
@@ -52,7 +54,8 @@ export function toProductItem(product: CatalogProduct): ProductItem {
       stock: variant.stock,
       additionalPrice: variant.additionalPrice,
     })),
-    stock: product.stock,
+    stock: getSellableStock({ stock: product.stock, status: product.status, variants: product.variants }),
+    status: product.status,
     isFeatured: product.isFeatured,
     isNewArrival: product.isNewArrival,
     isBestSeller: product.isBestSeller,

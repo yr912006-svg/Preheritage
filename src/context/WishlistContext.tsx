@@ -20,46 +20,78 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [wishlistReady, setWishlistReady] = useState(false);
   const [accountWishlist, setAccountWishlist] = useState(false);
 
+  const syncAccountWishlist = (init?: RequestInit) => {
+    void fetch("/api/account/wishlist", init)
+      .then((response) => {
+        if (response.status === 401) setAccountWishlist(false);
+      })
+      .catch(() => undefined);
+  };
+
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("preheritage_wishlist");
-      if (saved) setWishlist(JSON.parse(saved));
-    } catch (e) {
-      console.error("Failed to load wishlist", e);
-    } finally {
+    let active = true;
+    const restoreGuestWishlist = () => {
+      try {
+        const saved = localStorage.getItem("preheritage_guest_wishlist");
+        setWishlist(saved ? JSON.parse(saved) : []);
+      } catch {
+        setWishlist([]);
+      }
+    };
+
+    void fetch("/api/auth/session", { cache: "no-store" }).then(async (response) => {
+      const session = response.ok ? await response.json() : null;
+      if (!active) return;
+      const user = session?.user as { id?: string; role?: string } | undefined;
+      const isCustomer = Boolean(user?.id && user.role === "CUSTOMER");
+      setAccountWishlist(isCustomer);
+      setWishlist([]);
+      if (!isCustomer) restoreGuestWishlist();
       setWishlistReady(true);
-    }
+    }).catch(() => {
+      if (!active) return;
+      setAccountWishlist(false);
+      restoreGuestWishlist();
+      setWishlistReady(true);
+    });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
-    if (!wishlistReady) return;
+    if (!wishlistReady || !accountWishlist) return;
     let active = true;
     void fetch("/api/account/wishlist").then(async (response) => {
+      if (response.status === 401) {
+        try {
+          const saved = localStorage.getItem("preheritage_guest_wishlist");
+          setWishlist(saved ? JSON.parse(saved) : []);
+        } catch {
+          setWishlist([]);
+        }
+        setAccountWishlist(false);
+        return;
+      }
       if (!response.ok) return;
       const data = await response.json();
       if (!active) return;
-      if (data.products?.length) setWishlist(data.products);
-      else if (wishlist.length) {
-        await Promise.all(wishlist.map((item) => fetch("/api/account/wishlist", {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: item.id }),
-        })));
-      }
+      setWishlist(data.products || []);
       if (active) setAccountWishlist(true);
     }).catch(() => undefined);
     return () => { active = false; };
-  }, [wishlistReady]);
+  }, [wishlistReady, accountWishlist]);
 
   useEffect(() => {
     if (!wishlistReady) return;
     try {
-      localStorage.setItem("preheritage_wishlist", JSON.stringify(wishlist));
+      if (accountWishlist) return;
+      localStorage.setItem("preheritage_guest_wishlist", JSON.stringify(wishlist));
     } catch (e) {
       console.error("Failed to save wishlist", e);
     }
-  }, [wishlist, wishlistReady]);
+  }, [wishlist, wishlistReady, accountWishlist]);
 
   const addToWishlist = (product: ProductItem) => {
-    if (accountWishlist) void fetch("/api/account/wishlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: product.id }) }).catch(() => undefined);
+    if (accountWishlist) syncAccountWishlist({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: product.id }) });
     setWishlist((prev) => {
       if (prev.some((item) => item.id === product.id)) return prev;
       return [...prev, product];
@@ -67,7 +99,7 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const removeFromWishlist = (productId: string) => {
-    if (accountWishlist) void fetch("/api/account/wishlist", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId }) }).catch(() => undefined);
+    if (accountWishlist) syncAccountWishlist({ method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId }) });
     setWishlist((prev) => prev.filter((item) => item.id !== productId));
   };
 
@@ -84,7 +116,7 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const clearWishlist = () => {
-    if (accountWishlist) void Promise.all(wishlist.map((item) => fetch("/api/account/wishlist", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: item.id }) }))).catch(() => undefined);
+    if (accountWishlist) wishlist.forEach((item) => syncAccountWishlist({ method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: item.id }) }));
     setWishlist([]);
   };
 

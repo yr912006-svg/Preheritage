@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -16,11 +15,14 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import { ProductImage } from "@/components/shop/ProductImage";
+import { calculateCheckoutTotal, calculateShippingCharge } from "@/lib/cart-model";
 import { formatPrice, INDIAN_STATES, generateOrderNumber } from "@/lib/utils";
 
 export default function CheckoutPage() {
   const router = useRouter();
   const { cart, subtotal, discountAmount, clearCart, appliedCoupon } = useCart();
+  const validCart = cart.length > 0 && cart.every((item) => Number.isInteger(item.quantity) && item.quantity > 0 && Number.isFinite(item.price) && item.price > 0 && Number.isInteger(item.maxStock) && item.maxStock >= item.quantity);
 
   // Delivery details form
   const [formData, setFormData] = useState({
@@ -67,19 +69,27 @@ export default function CheckoutPage() {
   const [giftMessage, setGiftMessage] = useState("");
   const [orderNotes, setOrderNotes] = useState("");
 
-  // Payment method: RAZORPAY (UPI, Cards, NetBanking), COD, STRIPE
-  const [paymentMethod, setPaymentMethod] = useState<"RAZORPAY" | "COD" | "STRIPE">("RAZORPAY");
+  const [razorpayEnabled, setRazorpayEnabled] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"RAZORPAY" | "COD">("COD");
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/payments/config", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((config) => {
+      if (active) setRazorpayEnabled(config?.razorpayEnabled === true);
+    }).catch(() => { if (active) setRazorpayEnabled(false); });
+    return () => { active = false; };
+  }, []);
+
   // Pincode validation state
-  const [pincodeStatus, setPincodeStatus] = useState<"IDLE" | "VALIDATING" | "SERVICEABLE">("SERVICEABLE");
+  const [pincodeStatus, setPincodeStatus] = useState<"IDLE" | "VALID">("IDLE");
 
   // Calculations
-  const shippingFee = deliveryMethod === "express" ? 499 : subtotal >= 4999 ? 0 : 250;
+  const shippingFee = calculateShippingCharge(subtotal, deliveryMethod);
   const giftWrapFee = isGiftWrapped ? 199 : 0;
   const codFee = paymentMethod === "COD" ? 150 : 0;
-  const grandTotal = subtotal - discountAmount + shippingFee + giftWrapFee + codFee;
+  const grandTotal = calculateCheckoutTotal({ subtotal, discountAmount, shippingCharge: shippingFee, giftWrapCharge: giftWrapFee, codFee });
 
   // Handle form change
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -89,9 +99,7 @@ export default function CheckoutPage() {
   const handlePincodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const code = e.target.value.replace(/[^0-9]/g, "").slice(0, 6);
     setFormData((prev) => ({ ...prev, pincode: code }));
-    if (code.length === 6) {
-      setPincodeStatus("SERVICEABLE");
-    }
+    setPincodeStatus(code.length === 6 ? "VALID" : "IDLE");
   };
 
   // Dynamically load Razorpay SDK
@@ -112,6 +120,10 @@ export default function CheckoutPage() {
   // Place Order handler
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validCart) {
+      setErrorMessage("Your bag has no valid, available items. Return to the store and add an in-stock item.");
+      return;
+    }
     setIsProcessing(true);
     setErrorMessage("");
 
@@ -169,9 +181,11 @@ export default function CheckoutPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            items: cart.map((item: any) => ({ productId: item.productId || item.id, variantId: item.variantId, quantity: item.quantity })),
-            deliveryMethod,
-            giftWrap: isGiftWrapped,
+                    items: cart.map((item: any) => ({ productId: item.productId || item.id, variantId: item.variantId, quantity: item.quantity })),
+                    deliveryMethod,
+                    giftWrap: isGiftWrapped,
+                    couponCode: appliedCoupon?.code,
+                    customerEmail: formData.email,
           }),
         });
 
@@ -256,10 +270,6 @@ export default function CheckoutPage() {
         rzp.open();
       }
 
-      // Stripe checkout is not integrated yet; never show a fake success page.
-      if (paymentMethod === "STRIPE") {
-        throw new Error("International card payments are not available yet. Please choose Razorpay or Cash on Delivery.");
-      }
     } catch (err: any) {
       setErrorMessage(err.message || "An error occurred while placing your order. Please retry.");
       setIsProcessing(false);
@@ -372,9 +382,9 @@ export default function CheckoutPage() {
                       placeholder="6-digit PIN code"
                       className="w-full bg-white border border-ivory-300 p-2.5 rounded focus:outline-none focus:border-gold-500 font-mono"
                     />
-                    {pincodeStatus === "SERVICEABLE" && (
+                    {pincodeStatus === "VALID" && (
                       <span className="text-[10px] text-emerald-700 mt-1 block">
-                        ✓ Serviceable by Shiprocket Express Delivery
+                        PIN code format accepted. Delivery availability is confirmed after dispatch.
                       </span>
                     )}
                   </div>
@@ -460,10 +470,10 @@ export default function CheckoutPage() {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-charcoal-900">Standard Insured</span>
+                    <span className="font-bold text-charcoal-900">Standard Delivery</span>
                     <span className="text-gold-700 font-semibold">{subtotal >= 4999 ? "FREE" : "₹250"}</span>
                   </div>
-                  <span className="text-[11px] text-charcoal-100">Dispatches via Shiprocket (3-5 business days)</span>
+                  <span className="text-[11px] text-charcoal-100">Delivery timing is confirmed after dispatch.</span>
                   <input
                     type="radio"
                     name="delivery"
@@ -481,10 +491,10 @@ export default function CheckoutPage() {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-charcoal-900">Air Express Priority</span>
+                    <span className="font-bold text-charcoal-900">Priority Delivery</span>
                     <span className="text-gold-700 font-semibold">₹499</span>
                   </div>
-                  <span className="text-[11px] text-charcoal-100">Dispatched priority air transit (24-48 hours)</span>
+                  <span className="text-[11px] text-charcoal-100">Priority dispatch; delivery timing is confirmed after dispatch.</span>
                   <input
                     type="radio"
                     name="delivery"
@@ -532,7 +542,7 @@ export default function CheckoutPage() {
 
               <div className="space-y-3">
                 {/* Razorpay (UPI, Card, Netbanking) */}
-                <label
+                {razorpayEnabled && <label
                   className={`p-4 rounded border cursor-pointer flex items-center justify-between transition-all ${
                     paymentMethod === "RAZORPAY"
                       ? "border-gold-600 bg-gold-50/50"
@@ -549,15 +559,15 @@ export default function CheckoutPage() {
                     />
                     <div>
                       <span className="font-bold text-sm text-charcoal-900 block">
-                        Razorpay Secure (UPI, Cards, NetBanking, Wallets)
+                        Pay securely with Razorpay
                       </span>
                       <span className="text-[11px] text-charcoal-100">
-                        Supports Google Pay, PhonePe, Paytm, RuPay, Visa, Mastercard, and all Indian banks
+                        Payment methods available through Razorpay depend on your selected payment option.
                       </span>
                     </div>
                   </div>
                   <CreditCard className="w-5 h-5 text-gold-600 shrink-0" />
-                </label>
+                </label>}
 
                 {/* Cash on Delivery */}
                 <label
@@ -580,40 +590,13 @@ export default function CheckoutPage() {
                         Cash on Delivery (COD)
                       </span>
                       <span className="text-[11px] text-charcoal-100">
-                        Pay cash or UPI to delivery agent (+₹150 handling fee)
+                        Pay when your order is delivered (+₹150 handling fee)
                       </span>
                     </div>
                   </div>
                   <Truck className="w-5 h-5 text-gold-600 shrink-0" />
                 </label>
 
-                {/* Stripe for International */}
-                <label
-                  className={`p-4 rounded border cursor-pointer flex items-center justify-between transition-all ${
-                    paymentMethod === "STRIPE"
-                      ? "border-gold-600 bg-gold-50/50"
-                      : "border-ivory-300 bg-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      checked={paymentMethod === "STRIPE"}
-                      onChange={() => setPaymentMethod("STRIPE")}
-                      className="text-gold-600"
-                    />
-                    <div>
-                      <span className="font-bold text-sm text-charcoal-900 block">
-                        Stripe International Card
-                      </span>
-                      <span className="text-[11px] text-charcoal-100">
-                        For cards issued in USA, UK, Europe, UAE, Australia & worldwide
-                      </span>
-                    </div>
-                  </div>
-                  <span className="text-xs font-mono font-bold text-gold-700">USD/EUR</span>
-                </label>
               </div>
             </div>
           </div>
@@ -630,7 +613,7 @@ export default function CheckoutPage() {
                 {cart.map((item) => (
                   <div key={item.id} className="py-3 flex items-center justify-between gap-3 text-xs">
                     <div className="relative aspect-[3/4] w-12 rounded bg-ivory-200 overflow-hidden shrink-0">
-                      <Image src={item.image} alt={item.title} fill className="object-cover" />
+                      <ProductImage src={item.image} alt={item.title} />
                     </div>
                     <div className="flex-1">
                       <span className="font-semibold text-charcoal-900 block line-clamp-1">{item.title}</span>
@@ -680,9 +663,9 @@ export default function CheckoutPage() {
               </div>
 
               {/* Place Order CTA Button */}
-              <button
-                type="submit"
-                disabled={isProcessing}
+                <button
+                  type="submit"
+                disabled={isProcessing || !validCart}
                 className="w-full py-4 bg-charcoal-900 hover:bg-gold-600 disabled:bg-charcoal-200 text-ivory-50 text-xs uppercase tracking-[0.22em] font-semibold flex items-center justify-center gap-2 transition-all rounded shadow-luxury"
               >
                 {isProcessing ? (

@@ -8,6 +8,7 @@ import { ProductItem } from "@/lib/sample-data";
 import { formatPrice } from "@/lib/utils";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
+import { createCartItem } from "@/lib/cart-model";
 
 interface ProductCardProps {
   product: ProductItem;
@@ -18,15 +19,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { toggleWishlist, isInWishlist } = useWishlist();
   const [isHovered, setIsHovered] = useState(false);
   const [selectedSize, setSelectedSize] = useState(product.sizes[0] || "Standard");
+  const [unavailableImages, setUnavailableImages] = useState<string[]>([]);
+  const [quickAddMessage, setQuickAddMessage] = useState("");
+  const quickAddAvailable = Boolean(createCartItem(product, selectedSize, product.colors[0]?.name, 1).item);
 
   const isFavorited = isInWishlist(product.id);
   const primaryImage = product.images[0];
   const secondaryImage = product.images[1] || product.images[0];
+  const displayImage = isHovered ? secondaryImage : primaryImage;
 
   const handleQuickAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    addToCart(product, selectedSize, product.colors[0]?.name, 1);
+    const result = addToCart(product, selectedSize, product.colors[0]?.name, 1);
+    if (!result.success) setQuickAddMessage(result.message || "This selection is unavailable.");
   };
 
   const handleWishlistClick = (e: React.MouseEvent) => {
@@ -89,13 +95,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
         {/* Image link */}
         <Link href={`/products/${product.slug}`} className="block w-full h-full">
-          <Image
-            src={isHovered ? secondaryImage : primaryImage}
+          {displayImage && !unavailableImages.includes(displayImage) ? <Image
+            src={displayImage}
             alt={product.title}
             fill
+            unoptimized={displayImage.startsWith("/api/storage/")}
+            onError={() => setUnavailableImages((current) => current.includes(displayImage) ? current : [...current, displayImage])}
             className="object-cover object-top transition-all duration-700 ease-out group-hover:scale-105"
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-          />
+          /> : <span className="grid h-full w-full place-items-center font-serif text-2xl font-bold text-gold-700" aria-label="Product image unavailable">PH</span>}
         </Link>
 
         {/* Quick Add Overlay on Desktop Hover */}
@@ -109,6 +117,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                     e.preventDefault();
                     e.stopPropagation();
                     setSelectedSize(size);
+                    setQuickAddMessage("");
                   }}
                   className={`px-2 py-0.5 text-[10px] font-semibold uppercase rounded transition-colors ${
                     selectedSize === size
@@ -124,11 +133,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
           <button
             onClick={handleQuickAdd}
-            className="w-full py-2.5 bg-ivory-50 hover:bg-gold-500 text-charcoal-950 hover:text-charcoal-950 font-sans text-xs uppercase tracking-widest font-semibold flex items-center justify-center gap-2 transition-colors rounded-xs shadow-md"
+            disabled={!quickAddAvailable}
+            className="w-full py-2.5 bg-ivory-50 hover:bg-gold-500 disabled:bg-ivory-200 disabled:text-charcoal-400 disabled:cursor-not-allowed text-charcoal-950 hover:text-charcoal-950 font-sans text-xs uppercase tracking-widest font-semibold flex items-center justify-center gap-2 transition-colors rounded-xs shadow-md"
           >
             <ShoppingBag className="w-3.5 h-3.5" />
-            <span>Add to Bag</span>
+            <span>{quickAddAvailable ? "Add to Bag" : "Unavailable"}</span>
           </button>
+          {quickAddMessage && <span role="status" className="text-center text-[10px] text-ivory-50">{quickAddMessage}</span>}
         </div>
       </div>
 

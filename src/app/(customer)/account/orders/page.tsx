@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { getCustomerUser } from "@/lib/account-auth";
 import { AccountPageFrame } from "@/components/account/AccountNav";
@@ -7,7 +8,7 @@ import { formatPrice, ORDER_TIMELINE_STEPS } from "@/lib/utils";
 
 export default async function CustomerOrdersPage() {
   const user = await getCustomerUser();
-  if (!user) return null;
+  if (!user) redirect("/login?callbackUrl=%2Faccount%2Forders&reason=customer-required");
   const orders = await prisma.order.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, include: { items: true, timeline: { orderBy: { createdAt: "asc" } } } });
 
   return <AccountPageFrame active="/account/orders" title="Your Orders">

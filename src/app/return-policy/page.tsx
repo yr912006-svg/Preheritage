@@ -27,7 +27,7 @@ export default function ReturnPolicyPage() {
           2. Reverse Pickup Facility
         </h2>
         <p>
-          Upon approval of your exchange request, we arrange a complimentary reverse courier pickup right from your doorstep via Shiprocket. Please ensure the item is returned in its original condition, unworn, unwashed, with all original tags, muslin wraps, and box intact.
+          After an exchange request is approved, our team will confirm the return shipping arrangements. Please ensure the item is returned in its original condition, unworn, unwashed, with all original tags, muslin wraps, and box intact.
         </p>
 
         <h2 className="font-serif text-xl font-bold text-charcoal-900 pt-4">

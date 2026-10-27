@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -25,6 +25,7 @@ const navItems = [
   { name: "Overview", href: "/admin", icon: LayoutDashboard },
   { name: "Products", href: "/admin/products", icon: Package },
   { name: "Orders", href: "/admin/orders", icon: ShoppingBag },
+  { name: "Inquiries", href: "/admin/inquiries", icon: MessageSquare },
   { name: "Inventory", href: "/admin/inventory", icon: Layers },
   { name: "Customers", href: "/admin/customers", icon: Users },
   { name: "Coupons", href: "/admin/coupons", icon: Tags },
@@ -35,6 +36,14 @@ const navItems = [
 
 export const AdminSidebar: React.FC = () => {
   const pathname = usePathname();
+  const [newInquiries, setNewInquiries] = useState(0);
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/admin/inquiries", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((data) => {
+      if (active && data?.inquiries) setNewInquiries(data.inquiries.filter((item: { status: string }) => item.status === "OPEN").length);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   return (
     <aside className="w-64 bg-charcoal-950 text-ivory-200 border-r border-charcoal-800 flex flex-col justify-between min-h-screen shrink-0">
@@ -64,6 +73,7 @@ export const AdminSidebar: React.FC = () => {
               >
                 <Icon className={`w-4 h-4 ${isActive ? "text-charcoal-950" : "text-gold-400"}`} />
                 <span>{item.name}</span>
+                {item.name === "Inquiries" && newInquiries > 0 && <span className="ml-auto min-w-5 rounded-full bg-rose-600 px-1.5 py-0.5 text-center text-[10px] font-bold text-white">{newInquiries}</span>}
               </Link>
             );
           })}

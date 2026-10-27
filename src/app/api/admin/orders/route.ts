@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { OrderStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { getAdminUser } from "@/lib/account-auth";
+import { requireAdminUser } from "@/lib/account-auth";
 
 export async function GET() {
-  if (!await getAdminUser()) return NextResponse.json({ message: "Administrator access required." }, { status: 403 });
   try {
+    const access = await requireAdminUser();
+    if (!access.admin) return NextResponse.json({ message: access.status === 401 ? "Authentication required." : "Administrator access required." }, { status: access.status });
     const orders = await prisma.order.findMany({ orderBy: { createdAt: "desc" }, include: { items: true, user: { select: { name: true, email: true, phone: true } }, payment: { select: { status: true } } } });
     return NextResponse.json({ orders: orders.map((order) => {
       const address = order.shippingAddressSnapshot as Record<string, string> | null;
@@ -27,9 +28,9 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const admin = await getAdminUser();
-  if (!admin) return NextResponse.json({ message: "Administrator access required." }, { status: 403 });
   try {
+    const access = await requireAdminUser();
+    if (!access.admin) return NextResponse.json({ message: access.status === 401 ? "Authentication required." : "Administrator access required." }, { status: access.status });
     const body = await request.json();
     const orderId = typeof body?.orderId === "string" ? body.orderId : "";
     const status = typeof body?.status === "string" ? body.status : "";

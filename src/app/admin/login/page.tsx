@@ -18,12 +18,20 @@ export default function AdminLoginPage() {
     setLoading(true);
     setError("");
 
-    const result = await signIn("admin-credentials", { email, password, redirect: false });
-    if (result?.ok) {
-      const destination = new URLSearchParams(window.location.search).get("callbackUrl");
-      router.replace(destination?.startsWith("/admin") && !destination.startsWith("//") ? destination : "/admin");
-    } else {
-      setError("Invalid administrative credentials");
+    try {
+      const result = await signIn("admin-credentials", { email, password, redirect: false });
+      if (result?.ok) {
+        const destination = new URLSearchParams(window.location.search).get("callbackUrl");
+        router.replace(destination?.startsWith("/admin") && !destination.startsWith("//") ? destination : "/admin");
+        return;
+      }
+
+      setError(result?.error === "CredentialsSignin"
+        ? "Invalid administrative credentials"
+        : "Unable to verify credentials right now. Please try again.");
+    } catch {
+      setError("Unable to verify credentials right now. Please try again.");
+    } finally {
       setLoading(false);
     }
   };
@@ -65,7 +73,7 @@ export default function AdminLoginPage() {
           </div>
 
           <div>
-            <label className="block text-ivory-300 font-semibold mb-1">Administrative Secret Key</label>
+            <label className="block text-ivory-300 font-semibold mb-1">Administrator Password</label>
             <div className="relative">
               <Lock className="w-4 h-4 text-charcoal-100 absolute left-3 top-1/2 -translate-y-1/2" />
               <input

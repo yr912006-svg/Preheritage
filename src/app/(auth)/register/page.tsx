@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Lock, Mail, User, Phone, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
 import Logo from "@/components/layout/Logo";
+import { safeAccountReturnPath } from "@/lib/customer-route-access";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -56,13 +57,14 @@ export default function RegisterPage() {
       if (!res.ok) throw new Error(data.message || "Registration failed");
 
       // Sign in automatically
-      await signIn("credentials", {
+      const signInResult = await signIn("credentials", {
         email: formData.email,
         password: formData.password,
         redirect: false,
       });
-
-      router.push("/account");
+      if (!signInResult?.ok || signInResult.error) throw new Error("Your account was created, but sign in could not be completed. Please sign in.");
+      const callbackUrl = safeAccountReturnPath(new URLSearchParams(window.location.search).get("callbackUrl"));
+      router.replace(callbackUrl);
     } catch (err: any) {
       setError(err.message || "Failed to create account");
       setIsLoading(false);

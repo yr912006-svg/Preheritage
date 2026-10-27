@@ -18,7 +18,7 @@ const faqs = [
   },
   {
     q: "What payment methods are supported on PREHERITAGE?",
-    a: "We support all major Indian payment methods through Razorpay: UPI (GPay, PhonePe, Paytm, BHIM), RuPay cards, Visa, Mastercard, NetBanking (50+ banks), and Cash on Delivery (COD). For international orders, we accept global credit cards via Stripe.",
+    a: "Cash on Delivery is available. Other payment options are shown at checkout when the payment gateway is configured.",
   },
   {
     q: "How do I care for my antique zari and pure silk sarees?",
@@ -26,7 +26,7 @@ const faqs = [
   },
   {
     q: "How long does delivery take?",
-    a: "Within India, standard delivery takes 3 to 5 business days, while Priority Air takes 24 to 48 hours. International deliveries via DHL Express take 5 to 7 business days.",
+    a: "Delivery options and charges are displayed at checkout. Availability and timing depend on the destination; tracking details are shared after dispatch when available.",
   },
 ];
 

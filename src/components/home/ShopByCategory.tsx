@@ -4,7 +4,7 @@ import Image from "next/image";
 import { ArrowUpRight } from "lucide-react";
 import { CATEGORIES } from "@/lib/sample-data";
 
-export const ShopByCategory: React.FC = () => {
+export const ShopByCategory: React.FC<{ productCounts: Record<string, number> | null }> = ({ productCounts }) => {
   return (
     <section className="py-20 sm:py-28 bg-ivory-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -49,7 +49,7 @@ export const ShopByCategory: React.FC = () => {
               {/* Text Overlay */}
               <div className="absolute inset-x-0 bottom-0 p-5 text-ivory-50 flex flex-col justify-end">
                 <span className="text-[10px] uppercase tracking-widest text-gold-300 font-medium mb-1">
-                  {category.itemCount} Handcrafted Items
+                  {productCounts ? `${productCounts[category.slug] ?? 0} Handcrafted Items` : "Catalog count unavailable"}
                 </span>
                 <div className="flex items-center justify-between">
                   <h3 className="font-serif text-lg sm:text-xl font-bold text-white group-hover:text-gold-300 transition-colors">

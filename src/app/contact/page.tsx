@@ -12,10 +12,20 @@ export default function ContactPage() {
     message: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [website, setWebsite] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setSubmitting(true); setError("");
+    try {
+      const response = await fetch("/api/inquiries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...formData, website }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "We could not send your inquiry.");
+      setSubmitted(true);
+    } catch (err) { setError(err instanceof Error ? err.message : "We could not send your inquiry."); }
+    finally { setSubmitting(false); }
   };
 
   return (
@@ -87,6 +97,7 @@ export default function ContactPage() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4 text-xs">
                 <h2 className="font-serif text-lg font-bold text-charcoal-900 mb-2">Send An Atelier Inquiry</h2>
+                <div aria-hidden="true" className="absolute -left-[10000px] h-px w-px overflow-hidden"><label>Leave this field blank<input tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} /></label></div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -154,11 +165,13 @@ export default function ContactPage() {
 
                 <button
                   type="submit"
+                  disabled={submitting}
                   className="px-8 py-3.5 bg-charcoal-900 hover:bg-gold-600 text-ivory-50 text-xs uppercase tracking-widest font-semibold rounded flex items-center justify-center gap-2 transition-colors shadow-sm"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>Send Message</span>
+                  <span>{submitting ? "Sending…" : "Send Message"}</span>
                 </button>
+                {error && <p role="alert" className="text-rose-700">{error}</p>}
               </form>
             )}
           </div>

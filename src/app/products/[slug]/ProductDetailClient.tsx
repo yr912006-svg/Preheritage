@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,6 +24,7 @@ import { formatPrice } from "@/lib/utils";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import ProductCard from "@/components/shop/ProductCard";
+import { getSellableStock, isVariantAvailable } from "@/lib/inventory";
 
 interface ProductPageProps {
   product: ProductItem;
@@ -38,9 +39,11 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
   const { toggleWishlist, isInWishlist } = useWishlist();
 
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [unavailableImages, setUnavailableImages] = useState<string[]>([]);
   const [selectedSize, setSelectedSize] = useState(product.sizes[0] || "Free Size");
   const [selectedColor, setSelectedColor] = useState(product.colors[0]?.name || "Standard");
   const [quantity, setQuantity] = useState(1);
+  const [cartNotice, setCartNotice] = useState("");
   const [showVideo, setShowVideo] = useState(false);
   const [isSizeChartOpen, setIsSizeChartOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -54,14 +57,25 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
 
   const isFavorited = isInWishlist(product.id);
   const savingsAmount = product.mrp > product.price ? product.mrp - product.price : 0;
+  const hasVariants = Boolean(product.variants?.length);
+  const selectedVariant = product.variants?.find((variant) => variant.size === selectedSize && variant.color === selectedColor);
+  const selectedVariantAvailable = selectedVariant ? isVariantAvailable(product, selectedVariant.id) : !hasVariants && getSellableStock(product) > 0;
+  const availableStock = selectedVariantAvailable ? selectedVariant?.stock ?? getSellableStock(product) : 0;
+  const canAddSelectedItem = Boolean(selectedVariantAvailable && Number.isInteger(availableStock) && availableStock > 0);
+
+  useEffect(() => {
+    setQuantity((current) => canAddSelectedItem ? Math.max(1, Math.min(current, availableStock)) : 1);
+  }, [availableStock, canAddSelectedItem]);
 
   const handleAddToCart = () => {
-    addToCart(product, selectedSize, selectedColor, quantity);
+    const result = addToCart(product, selectedSize, selectedColor, quantity);
+    setCartNotice(result.success ? "Added to your Heritage Bag." : result.message || "This selection could not be added.");
   };
 
   const handleBuyNow = () => {
-    addToCart(product, selectedSize, selectedColor, quantity);
-    router.push("/checkout");
+    const result = addToCart(product, selectedSize, selectedColor, quantity);
+    if (result.success) router.push("/checkout");
+    else setCartNotice(result.message || "This selection could not be added.");
   };
 
   const handleCopyLink = () => {
@@ -121,7 +135,7 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
                       : "border-transparent opacity-70 hover:opacity-100"
                   }`}
                 >
-                  <Image src={img} alt={`${product.title} thumbnail ${idx + 1}`} fill unoptimized={img.startsWith("/api/storage/")} className="object-cover" />
+                  {unavailableImages.includes(img) ? <span className="grid h-full place-items-center font-serif font-bold text-gold-700">PH</span> : <Image src={img} alt={`${product.title} thumbnail ${idx + 1}`} fill unoptimized={img.startsWith("/api/storage/")} onError={() => setUnavailableImages((current) => current.includes(img) ? current : [...current, img])} className="object-cover" />}
                 </button>
               ))}
 
@@ -147,13 +161,14 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
                   autoPlay
                   className="w-full h-full object-cover"
                 />
-              ) : product.images[activeImageIndex] ? (
+              ) : product.images[activeImageIndex] && !unavailableImages.includes(product.images[activeImageIndex]) ? (
                 <Image
                   src={product.images[activeImageIndex] || product.images[0]}
                   alt={product.title}
                   fill
                   priority
                   unoptimized={product.images[activeImageIndex]?.startsWith("/api/storage/")}
+                  onError={() => setUnavailableImages((current) => current.includes(product.images[activeImageIndex]) ? current : [...current, product.images[activeImageIndex]])}
                   className="object-cover object-top transition-transform duration-700 ease-out group-hover:scale-105"
                   sizes="(max-width: 1024px) 100vw, 60vw"
                 />
@@ -222,7 +237,7 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
                 )}
               </div>
               <p className="text-[11px] text-charcoal-100 mt-1 font-light">
-                Inclusive of all taxes. Free Express Insured Shipping across India.
+                Inclusive of all taxes. Shipping options and charges are shown at checkout.
               </p>
 
               {/* Color Selector */}
@@ -234,7 +249,7 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
                   {product.colors.map((c) => (
                     <button
                       key={c.name}
-                      onClick={() => setSelectedColor(c.name)}
+                      onClick={() => { setSelectedColor(c.name); setCartNotice(""); }}
                       className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs transition-all ${
                         selectedColor === c.name
                           ? "border-gold-600 bg-gold-50 text-gold-900 font-medium"
@@ -266,7 +281,7 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
                   {product.sizes.map((size) => (
                     <button
                       key={size}
-                      onClick={() => setSelectedSize(size)}
+                      onClick={() => { setSelectedSize(size); setCartNotice(""); }}
                       className={`min-w-12 px-3 py-2 text-xs font-semibold uppercase rounded transition-all border ${
                         selectedSize === size
                           ? "bg-charcoal-900 text-ivory-50 border-charcoal-900 shadow-sm"
@@ -286,13 +301,15 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
                   <div className="flex items-center border border-ivory-300 rounded bg-white">
                     <button
                       onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                      disabled={!canAddSelectedItem || quantity <= 1}
                       className="px-2.5 py-1 text-charcoal-400 hover:text-charcoal-900 text-sm"
                     >
                       -
                     </button>
                     <span className="px-3 text-xs font-bold text-charcoal-900">{quantity}</span>
                     <button
-                      onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
+                      onClick={() => setQuantity(Math.min(availableStock, quantity + 1))}
+                      disabled={!canAddSelectedItem || quantity >= availableStock}
                       className="px-2.5 py-1 text-charcoal-400 hover:text-charcoal-900 text-sm"
                     >
                       +
@@ -300,8 +317,8 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
                   </div>
                 </div>
 
-                <div className="text-xs text-amber-700 bg-amber-50 px-2.5 py-1 rounded border border-amber-200 font-medium">
-                  Only {product.stock} pieces woven for this launch
+                <div className={`text-xs px-2.5 py-1 rounded border font-medium ${canAddSelectedItem ? "text-amber-700 bg-amber-50 border-amber-200" : "text-rose-700 bg-rose-50 border-rose-200"}`}>
+                  {canAddSelectedItem ? `Only ${availableStock} pieces available for this selection` : "This size and color selection is currently unavailable"}
                 </div>
               </div>
 
@@ -309,7 +326,8 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
               <div className="mt-8 space-y-3">
                 <button
                   onClick={handleAddToCart}
-                  className="w-full py-4 bg-charcoal-900 hover:bg-gold-600 text-ivory-50 text-xs uppercase tracking-[0.22em] font-semibold flex items-center justify-center gap-2 transition-colors rounded-xs shadow-luxury"
+                  disabled={!canAddSelectedItem}
+                  className="w-full py-4 bg-charcoal-900 hover:bg-gold-600 disabled:bg-charcoal-300 disabled:cursor-not-allowed text-ivory-50 text-xs uppercase tracking-[0.22em] font-semibold flex items-center justify-center gap-2 transition-colors rounded-xs shadow-luxury"
                 >
                   <ShoppingBag className="w-4 h-4" />
                   <span>Add to Heritage Bag</span>
@@ -317,10 +335,12 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
 
                 <button
                   onClick={handleBuyNow}
-                  className="w-full py-3.5 bg-gold-500 hover:bg-gold-600 text-charcoal-950 text-xs uppercase tracking-[0.22em] font-semibold flex items-center justify-center gap-2 transition-colors rounded-xs shadow-gold"
+                  disabled={!canAddSelectedItem}
+                  className="w-full py-3.5 bg-gold-500 hover:bg-gold-600 disabled:bg-gold-200 disabled:cursor-not-allowed text-charcoal-950 text-xs uppercase tracking-[0.22em] font-semibold flex items-center justify-center gap-2 transition-colors rounded-xs shadow-gold"
                 >
                   <span>Buy Now with 1-Click</span>
                 </button>
+                {cartNotice && <p role="status" className="text-xs text-charcoal-600" aria-live="polite">{cartNotice}</p>}
               </div>
 
               {/* Trust & Dispatch Highlights */}
@@ -410,7 +430,7 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
                   : "border-transparent text-charcoal-100 hover:text-charcoal-900"
               }`}
             >
-              Insured Transit & Returns
+              Shipping & Returns
             </button>
           </div>
 
@@ -464,13 +484,13 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
             {activeTab === "SHIPPING" && (
               <div className="space-y-4 max-w-3xl">
                 <h3 className="font-serif text-2xl font-bold text-charcoal-900">
-                  Shiprocket Logistics & Insured Delivery
+                  Shipping & Delivery
                 </h3>
                 <p>
-                  Every order is packed in our signature royal ivory packaging with wax seal protection and handed to premier courier partners (Delhivery, Bluedart, or Shiprocket Priority).
+                  Delivery options and applicable charges are shown during checkout. Tracking details are added to your order after dispatch when available.
                 </p>
                 <p>
-                  Domestic transit takes 2-4 business days. International transit takes 5-7 business days via DHL Express. 7-day hassle-free reverse pickup available for sizing exchanges.
+                  Delivery availability and timing depend on the destination. Please review the shipping and return policies or contact our concierge before placing an order.
                 </p>
               </div>
             )}

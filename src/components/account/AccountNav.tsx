@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { signOut } from "next-auth/react";
 
 const links = [
   { href: "/account", label: "Profile & Addresses" },
@@ -15,6 +18,10 @@ export function AccountNav({ active }: { active: string }) {
           {link.label}
         </Link>
       ))}
+      <button type="button" onClick={() => signOut({ callbackUrl: "/login" })}
+        className="rounded bg-ivory-50 px-4 py-2 text-xs font-semibold text-charcoal-700 transition-colors hover:bg-ivory-200">
+        Sign out
+      </button>
     </nav>
   );
 }

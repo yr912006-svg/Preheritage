@@ -2,10 +2,10 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { X, Plus, Minus, Trash2, ArrowRight, ShieldCheck, Tag } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { formatPrice } from "@/lib/utils";
+import { ProductImage } from "@/components/shop/ProductImage";
 
 export const CartDrawer: React.FC = () => {
   const {
@@ -112,13 +112,7 @@ export const CartDrawer: React.FC = () => {
               cart.map((item) => (
                 <div key={item.id} className="py-4 flex gap-4">
                   <div className="relative w-20 h-24 rounded bg-ivory-200 overflow-hidden shrink-0 border border-ivory-300">
-                    <Image
-                      src={item.image}
-                      alt={item.title}
-                      fill
-                      className="object-cover"
-                      sizes="80px"
-                    />
+                    <ProductImage src={item.image} alt={item.title} sizes="80px" />
                   </div>
 
                   <div className="flex-1 flex flex-col justify-between">
@@ -259,7 +253,7 @@ export const CartDrawer: React.FC = () => {
 
               <div className="flex items-center justify-center gap-2 text-[10px] text-charcoal-100">
                 <ShieldCheck className="w-3.5 h-3.5 text-gold-500" />
-                <span>100% Authentic Handloom Guarantee • Insured Transit</span>
+                <span>Order updates are provided after dispatch.</span>
               </div>
             </div>
           )}

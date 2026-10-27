@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { getCustomerUser } from "@/lib/account-auth";
 import { AccountPageFrame } from "@/components/account/AccountNav";
@@ -5,7 +6,7 @@ import { AccountSettings } from "@/components/account/AccountSettings";
 
 export default async function CustomerAccountPage() {
   const user = await getCustomerUser();
-  if (!user) return null;
+  if (!user) redirect("/login?callbackUrl=%2Faccount&reason=customer-required");
   const [addresses, orderCount, wishlistCount] = await Promise.all([
     prisma.address.findMany({ where: { userId: user.id }, orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }] }),
     prisma.order.count({ where: { userId: user.id } }),
