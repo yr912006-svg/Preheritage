@@ -4,7 +4,7 @@ import React, { useState, Suspense, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { Lock, Mail, ArrowRight, Smartphone, AlertCircle } from "lucide-react";
+import { Lock, Mail, ArrowRight, AlertCircle } from "lucide-react";
 import Logo from "@/components/layout/Logo";
 import { safeAccountReturnPath } from "@/lib/customer-route-access";
 
@@ -121,15 +121,6 @@ function LoginForm() {
         </svg>
         <span>Continue with Google</span>
       </button>}
-
-      {/* Mobile OTP Login switch */}
-      <Link
-        href={`/otp-login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
-        className="w-full py-2.5 px-4 bg-ivory-100 hover:bg-ivory-200 border border-ivory-300 rounded text-xs font-semibold text-charcoal-800 flex items-center justify-center gap-2 transition-colors mb-6"
-      >
-        <Smartphone className="w-4 h-4 text-gold-600" />
-        <span>Login with Mobile Number & OTP</span>
-      </Link>
 
       <div className="relative mb-6">
         <div className="absolute inset-0 flex items-center">

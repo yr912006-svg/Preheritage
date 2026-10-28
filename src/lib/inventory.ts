@@ -10,6 +10,12 @@ export interface InventoryProduct {
   variants?: InventoryVariant[];
 }
 
+export function applyStockDelta(current: number, delta: number, maximum = 100000) {
+  if (!Number.isInteger(current) || current < 0 || current > maximum || !Number.isInteger(delta) || Math.abs(delta) !== 1) return null;
+  const next = current + delta;
+  return next >= 0 && next <= maximum ? next : null;
+}
+
 export function getSellableStock(product: InventoryProduct): number {
   if (product.status && product.status !== "ACTIVE") return 0;
   if (product.variants?.length) {

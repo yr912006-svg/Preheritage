@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { OrderStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { requireAdminUser } from "@/lib/account-auth";
+import { requireAdminCapability } from "@/lib/account-auth";
+import { ADMIN_API_CAPABILITIES, withAdminCapability } from "@/lib/admin-api-access";
+import { adminAuditStore } from "@/lib/admin-audit";
 
-export async function GET() {
+async function getOrders(_request: Request) {
   try {
-    const access = await requireAdminUser();
-    if (!access.admin) return NextResponse.json({ message: access.status === 401 ? "Authentication required." : "Administrator access required." }, { status: access.status });
     const orders = await prisma.order.findMany({ orderBy: { createdAt: "desc" }, include: { items: true, user: { select: { name: true, email: true, phone: true } }, payment: { select: { status: true } } } });
     return NextResponse.json({ orders: orders.map((order) => {
       const address = order.shippingAddressSnapshot as Record<string, string> | null;
@@ -27,10 +27,8 @@ export async function GET() {
   }
 }
 
-export async function PATCH(request: Request) {
+async function updateOrder(request: Request) {
   try {
-    const access = await requireAdminUser();
-    if (!access.admin) return NextResponse.json({ message: access.status === 401 ? "Authentication required." : "Administrator access required." }, { status: access.status });
     const body = await request.json();
     const orderId = typeof body?.orderId === "string" ? body.orderId : "";
     const status = typeof body?.status === "string" ? body.status : "";
@@ -57,3 +55,13 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ message: "Could not update this order." }, { status: 503 });
   }
 }
+
+function createAdminOrderHandlers(authorize = requireAdminCapability) {
+  return {
+    GET: withAdminCapability(ADMIN_API_CAPABILITIES.orders.methods.GET, getOrders, authorize),
+    PATCH: withAdminCapability(ADMIN_API_CAPABILITIES.orders.methods.PATCH, updateOrder, authorize, adminAuditStore),
+  };
+}
+
+const handlers = createAdminOrderHandlers();
+export const { GET, PATCH } = handlers;

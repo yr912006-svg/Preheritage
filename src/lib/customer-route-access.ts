@@ -18,6 +18,11 @@ export function safeAccountReturnPath(value: string | null | undefined): string 
   }
 }
 
+export function disabledOtpLoginRedirect(callbackUrl: string | null | undefined): string {
+  const safeCallbackUrl = safeAccountReturnPath(callbackUrl);
+  return `/login?callbackUrl=${encodeURIComponent(safeCallbackUrl)}`;
+}
+
 export function customerRouteAccess(token: CustomerRouteToken | null, returnPath: string) {
   const callbackUrl = safeAccountReturnPath(returnPath);
   if (!token || typeof token.id !== "string" || !token.id) {

@@ -4,19 +4,24 @@ import React, { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { SlidersHorizontal, Search, X, Check, ChevronDown, RotateCcw } from "lucide-react";
 import ProductCard from "@/components/shop/ProductCard";
-import { CATEGORIES, REGIONS, type ProductItem } from "@/lib/sample-data";
+import type { ProductItem } from "@/lib/sample-data";
 import { formatPrice } from "@/lib/utils";
 
-function ShopContent({ products, loadError }: { products: ProductItem[]; loadError?: boolean }) {
+type FilterOption = { id: string; name: string; slug: string; state?: string };
+type ShopProps = { products: ProductItem[]; categories: FilterOption[]; collections: FilterOption[]; regions: FilterOption[]; loadError?: boolean };
+
+function ShopContent({ products, categories, collections, regions, loadError }: ShopProps) {
   const searchParams = useSearchParams();
   const initialCategory = searchParams.get("category") || "";
   const initialRegion = searchParams.get("region") || "";
+  const initialCollection = searchParams.get("collection") || "";
   const initialQuery = searchParams.get("q") || "";
   const initialBadge = searchParams.get("badge") || "";
 
   useEffect(() => {
     setSelectedCategory(searchParams.get("category") || "");
     setSelectedRegion(searchParams.get("region") || "");
+    setSelectedCollection(searchParams.get("collection") || "");
     setSearchQuery(searchParams.get("q") || "");
     setSelectedBadge(searchParams.get("badge") || "");
   }, [searchParams]);
@@ -24,6 +29,7 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
   // Filter states
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [selectedRegion, setSelectedRegion] = useState(initialRegion);
+  const [selectedCollection, setSelectedCollection] = useState(initialCollection);
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedBadge, setSelectedBadge] = useState(initialBadge);
   const [selectedSize, setSelectedSize] = useState("");
@@ -67,6 +73,8 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
         return false;
       }
 
+      if (selectedCollection && product.collection !== selectedCollection) return false;
+
       // Badge
       if (selectedBadge && product.badge !== selectedBadge) {
         return false;
@@ -103,6 +111,7 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
     searchQuery,
     selectedCategory,
     selectedRegion,
+    selectedCollection,
     selectedBadge,
     selectedSize,
     selectedColor,
@@ -110,13 +119,14 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
     sortBy,
   ]);
 
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, selectedCategory, selectedRegion, selectedBadge, selectedSize, selectedColor, priceRange, sortBy]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, selectedCategory, selectedRegion, selectedCollection, selectedBadge, selectedSize, selectedColor, priceRange, sortBy]);
   const pageCount = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
   const pagedProducts = filteredProducts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const clearAllFilters = () => {
     setSelectedCategory("");
     setSelectedRegion("");
+    setSelectedCollection("");
     setSearchQuery("");
     setSelectedBadge("");
     setSelectedSize("");
@@ -128,6 +138,7 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
   const activeFiltersCount =
     (selectedCategory ? 1 : 0) +
     (selectedRegion ? 1 : 0) +
+    (selectedCollection ? 1 : 0) +
     (searchQuery ? 1 : 0) +
     (selectedBadge ? 1 : 0) +
     (selectedSize ? 1 : 0) +
@@ -143,15 +154,17 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
             <span>Home</span> / <span>Collections</span> /{" "}
             <span className="text-charcoal-900 font-medium">
               {selectedCategory
-                ? CATEGORIES.find((c) => c.slug === selectedCategory)?.name || selectedCategory
+                ? categories.find((c) => c.slug === selectedCategory)?.name || selectedCategory
                 : "All Treasures"}
             </span>
           </div>
           <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold text-charcoal-900">
             {selectedCategory
-              ? CATEGORIES.find((c) => c.slug === selectedCategory)?.name
+              ? categories.find((c) => c.slug === selectedCategory)?.name
               : selectedRegion
-              ? `Heritage of ${REGIONS.find((r) => r.slug === selectedRegion)?.name || selectedRegion}`
+              ? `Heritage of ${regions.find((r) => r.slug === selectedRegion)?.name || selectedRegion}`
+              : selectedCollection
+              ? collections.find((c) => c.slug === selectedCollection)?.name || selectedCollection
               : "Curated Heritage Catalog"}
           </h1>
           <p className="text-xs sm:text-sm text-charcoal-200 mt-2 font-light max-w-2xl">
@@ -226,6 +239,12 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
                 </button>
               </span>
             )}
+            {selectedCollection && (
+              <span className="bg-gold-100 text-gold-900 px-2.5 py-1 rounded-full flex items-center gap-1.5 font-medium">
+                Collection: {collections.find((item) => item.slug === selectedCollection)?.name || selectedCollection}
+                <button onClick={() => setSelectedCollection("")} aria-label="Clear collection filter"><X className="w-3 h-3" /></button>
+              </span>
+            )}
             {selectedBadge && (
               <span className="bg-gold-100 text-gold-900 px-2.5 py-1 rounded-full flex items-center gap-1.5 font-medium">
                 Badge: {selectedBadge}
@@ -281,7 +300,7 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
                 >
                   All Categories ({products.length})
                 </button>
-                {CATEGORIES.map((cat) => (
+                {categories.map((cat) => (
                   <button
                     key={cat.id}
                     onClick={() => setSelectedCategory(cat.slug === selectedCategory ? "" : cat.slug)}
@@ -330,7 +349,7 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
                 Craft Region
               </h3>
               <div className="space-y-1.5 text-xs">
-                {REGIONS.map((r) => (
+                {regions.map((r) => (
                   <button
                     key={r.id}
                     onClick={() => setSelectedRegion(r.slug === selectedRegion ? "" : r.slug)}
@@ -341,9 +360,17 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
                     }`}
                   >
                     <span>{r.name}</span>
-                    <span className="text-[10px] text-charcoal-100">{r.state}</span>
+                    {r.state && <span className="text-[10px] text-charcoal-100">{r.state}</span>}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-xs text-charcoal-900 font-bold mb-3">Collections</h3>
+              <div className="space-y-1.5 text-xs">
+                {collections.map((collection) => <button key={collection.id} onClick={() => setSelectedCollection(collection.slug === selectedCollection ? "" : collection.slug)} className={`block w-full text-left py-1 ${selectedCollection === collection.slug ? "font-bold text-gold-700" : "text-charcoal-200 hover:text-charcoal-900"}`}>{collection.name}</button>)}
+                {!collections.length && <p className="text-charcoal-400">No collections available.</p>}
               </div>
             </div>
 
@@ -418,7 +445,7 @@ function ShopContent({ products, loadError }: { products: ProductItem[]; loadErr
   );
 }
 
-export default function ShopClient({ products, loadError }: { products: ProductItem[]; loadError?: boolean }) {
+export default function ShopClient({ products, categories, collections, regions, loadError }: ShopProps) {
   return (
     <Suspense
       fallback={
@@ -427,7 +454,7 @@ export default function ShopClient({ products, loadError }: { products: ProductI
         </div>
       }
     >
-      <ShopContent products={products} loadError={loadError} />
+      <ShopContent products={products} categories={categories} collections={collections} regions={regions} loadError={loadError} />
     </Suspense>
   );
 }

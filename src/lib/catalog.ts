@@ -4,6 +4,8 @@ import { getSellableStock } from "@/lib/inventory";
 
 export const catalogProductInclude = {
   category: true,
+  subcategory: true,
+  collection: true,
   region: true,
   images: { orderBy: [{ isPrimary: "desc" as const }, { orderIndex: "asc" as const }] },
   variants: { orderBy: [{ size: "asc" as const }, { color: "asc" as const }] },
@@ -11,6 +13,10 @@ export const catalogProductInclude = {
 } satisfies Prisma.ProductInclude;
 
 export type CatalogProduct = Prisma.ProductGetPayload<{ include: typeof catalogProductInclude }>;
+
+export type StorefrontCategory = { id: string; name: string; slug: string; description: string | null; image: string | null; orderIndex: number };
+export type StorefrontCollection = { id: string; name: string; slug: string; tagline: string | null; description: string | null; bannerImage: string | null };
+export type StorefrontRegion = { id: string; name: string; slug: string; state: string; culturalStory: string; craftForm: string; bannerImage: string | null };
 
 export function toProductItem(product: CatalogProduct): ProductItem {
   const sizes = Array.from(new Set(product.variants.map((variant) => variant.size)));
@@ -27,7 +33,8 @@ export function toProductItem(product: CatalogProduct): ProductItem {
     sku: product.sku,
     createdAt: product.createdAt.toISOString(),
     category: product.category.slug,
-    collection: product.collectionId || undefined,
+    subcategory: product.subcategory?.slug || undefined,
+    collection: product.collection?.slug || undefined,
     region: product.region?.slug || "",
     state: product.region?.state || "",
     price: product.price,
