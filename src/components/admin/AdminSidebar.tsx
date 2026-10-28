@@ -24,6 +24,7 @@ import { signOut } from "next-auth/react";
 const navItems = [
   { name: "Overview", href: "/admin", icon: LayoutDashboard },
   { name: "Products", href: "/admin/products", icon: Package },
+  { name: "Catalogue Taxonomy", href: "/admin/catalog", icon: Tags },
   { name: "Orders", href: "/admin/orders", icon: ShoppingBag },
   { name: "Inquiries", href: "/admin/inquiries", icon: MessageSquare },
   { name: "Inventory", href: "/admin/inventory", icon: Layers },

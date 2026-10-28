@@ -3,8 +3,8 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Plus, Search, Edit, Trash2, Copy, Eye, AlertCircle } from "lucide-react";
-import { ProductItem } from "@/lib/sample-data";
+import { Plus, Search, Edit, Trash2, Copy, Eye, RotateCcw } from "lucide-react";
+import type { ProductItem } from "@/lib/sample-data";
 import { formatPrice } from "@/lib/utils";
 
 export default function AdminProductsPage() {
@@ -28,12 +28,13 @@ export default function AdminProductsPage() {
       p.category.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to remove this handcrafted creation from the catalog?")) {
-      const response = await fetch("/api/admin/products", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: id }) });
+  const handleStatus = async (product: ProductItem & { status: string }) => {
+    const nextStatus = product.status === "ARCHIVED" ? "ACTIVE" : "ARCHIVED";
+    if (confirm(nextStatus === "ARCHIVED" ? "Archive this product from the storefront?" : "Activate this product on the storefront?")) {
+      const response = await fetch(nextStatus === "ARCHIVED" ? "/api/admin/products" : "/api/admin/products", { method: nextStatus === "ARCHIVED" ? "DELETE" : "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nextStatus === "ARCHIVED" ? { productId: product.id } : { productId: product.id, status: nextStatus }) });
       const data = await response.json();
-      if (response.ok) setProducts((previous) => previous.filter((product) => product.id !== id));
-      else setError(data.message || "Could not archive this product.");
+      if (response.ok) setProducts((previous) => previous.map((item) => item.id === product.id ? { ...item, status: nextStatus } : item));
+      else setError(data.message || "Could not change this product status.");
     }
   };
 
@@ -126,12 +127,19 @@ export default function AdminProductsPage() {
                     </span>
                   </td>
                   <td className="p-4">
-                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px] uppercase font-bold">
+                    <span className={`rounded px-2 py-0.5 text-[10px] uppercase font-bold ${prod.status === "ACTIVE" ? "bg-emerald-100 text-emerald-800" : prod.status === "ARCHIVED" ? "bg-charcoal-100 text-charcoal-600" : "bg-amber-100 text-amber-800"}`}>
                       {prod.status}
                     </span>
                   </td>
                   <td className="p-4 text-right">
                     <div className="flex items-center justify-end gap-2 text-charcoal-200">
+                      <Link
+                        href={`/admin/products/${prod.id}/edit`}
+                        className="p-1 hover:text-gold-700"
+                        title="Edit product"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Link>
                       <Link
                         href={`/products/${prod.slug}`}
                         target="_blank"
@@ -148,11 +156,11 @@ export default function AdminProductsPage() {
                         <Copy className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(prod.id)}
-                        className="p-1 hover:text-rose-600 text-rose-500"
-                        title="Delete"
+                        onClick={() => handleStatus(prod)}
+                        className={`p-1 ${prod.status === "ARCHIVED" ? "text-emerald-700 hover:text-emerald-900" : "text-rose-500 hover:text-rose-700"}`}
+                        title={prod.status === "ARCHIVED" ? "Activate" : "Archive"}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {prod.status === "ARCHIVED" ? <RotateCcw className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
                       </button>
                     </div>
                   </td>

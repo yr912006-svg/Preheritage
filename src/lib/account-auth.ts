@@ -1,7 +1,12 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { adminSessionStatus } from "@/lib/admin-session-access";
+import {
+  adminCapabilityStatus,
+  hasAdminSession,
+  type ActiveAdminRecord,
+  type AdminCapability,
+} from "@/lib/admin-session-access";
 
 export type CustomerUserResolution =
   | { status: "authorized"; user: NonNullable<Awaited<ReturnType<typeof findActiveCustomer>>> }
@@ -39,84 +44,48 @@ export async function getCustomerUser() {
 }
 
 export async function requireAdminUser() {
-  const session = await getServerSession(authOptions);
-  const identity = session?.user as { id?: string; role?: string; adminRole?: string; email?: string | null } | undefined;
-  const status = adminSessionStatus(identity);
-  if (status !== 200) {
-    if (process.env.NODE_ENV === "development") {
-      const diagnostics = await getAdminAuthDiagnostics(identity);
-      console.info("Admin authorization diagnostic", {
-        sessionExists: Boolean(session),
-        userId: identity?.id ?? null,
-        sessionRole: identity?.role ?? null,
-        ...diagnostics,
-        failedCondition: status === 401 ? "session user ID missing" : 'session role is not "ADMIN"',
-        decision: "deny",
-        status,
-      });
-    }
-    return { admin: null, status };
-  }
-  const admin = await prisma.admin.findFirst({
-    where: {
-      isActive: true,
-      OR: [
-        { id: identity.id },
-        ...(identity.email ? [{ email: { equals: identity.email.trim(), mode: "insensitive" as const } }] : []),
-      ],
-    },
-    select: { id: true, email: true, role: true },
-  });
-  if (process.env.NODE_ENV === "development") {
-    console.info("Admin authorization diagnostic", {
-      sessionExists: Boolean(session),
-      userId: identity.id,
-      sessionRole: identity.role,
-      databaseAdminRole: admin?.role ?? null,
-      activeAdminRecordFound: Boolean(admin),
-      failedCondition: admin ? null : "no active Admin row matched session ID or email",
-      decision: admin ? "allow" : "active_admin_record_missing",
-      status: admin ? 200 : 403,
+  const identity = await getAdminSessionIdentity();
+  if (!hasAdminSession(identity)) return { admin: null, status: 401 as const };
+
+  try {
+    // The session ID identifies the principal; permissions always come from
+    // the current Admin row. Session role claims are deliberately ignored.
+    const admin = await prisma.admin.findUnique({
+      where: { id: identity.id! },
+      select: { id: true, email: true, role: true, isActive: true },
     });
+    if (!admin?.isActive) return { admin: null, status: 403 as const };
+    return { admin, status: 200 as const };
+  } catch {
+    return { admin: null, status: 503 as const };
   }
-  if (!admin) {
-    return { admin: null, status: 403 as const };
+}
+
+export async function requireAdminCapability(capability: AdminCapability) {
+  const identity = await getAdminSessionIdentity();
+  if (!hasAdminSession(identity)) return { admin: null, status: 401 as const };
+
+  try {
+    const admin = await prisma.admin.findUnique({
+      where: { id: identity.id! },
+      select: { id: true, email: true, role: true, isActive: true },
+    });
+    const status = adminCapabilityStatus(identity, admin as ActiveAdminRecord | null, capability);
+    return status === 200 ? { admin, status } : { admin: null, status };
+  } catch {
+    return { admin: null, status: 503 as const };
   }
-  return { admin, status: 200 as const };
 }
 
 export async function getAdminUser() {
   return (await requireAdminUser()).admin;
 }
 
-async function getAdminAuthDiagnostics(identity: { id?: string; email?: string | null } | undefined) {
+async function getAdminSessionIdentity() {
   try {
-    const [user, admin] = await Promise.all([
-      identity?.id
-        ? prisma.user.findUnique({ where: { id: identity.id }, select: { role: true } })
-        : Promise.resolve(null),
-      identity?.id || identity?.email
-        ? prisma.admin.findFirst({
-            where: {
-              OR: [
-                ...(identity.id ? [{ id: identity.id }] : []),
-                ...(identity.email ? [{ email: { equals: identity.email.trim(), mode: "insensitive" as const } }] : []),
-              ],
-            },
-            select: { role: true, isActive: true },
-          })
-        : Promise.resolve(null),
-    ]);
-    return {
-      databaseUserRole: user?.role ?? null,
-      databaseAdminRole: admin?.role ?? null,
-      activeAdminRecordFound: Boolean(admin?.isActive),
-    };
+    const session = await getServerSession(authOptions);
+    return session?.user as { id?: string | null } | undefined;
   } catch {
-    return {
-      databaseUserRole: "unavailable",
-      databaseAdminRole: "unavailable",
-      activeAdminRecordFound: "unavailable",
-    };
+    return undefined;
   }
 }

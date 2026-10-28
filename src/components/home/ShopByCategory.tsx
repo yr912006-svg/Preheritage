@@ -2,9 +2,11 @@ import React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowUpRight } from "lucide-react";
+import type { StorefrontCategory } from "@/lib/catalog";
+import { getStorefrontCategoryCountLabel, getStorefrontCategoryImage } from "@/lib/category-presentation";
 import { CATEGORIES } from "@/lib/sample-data";
 
-export const ShopByCategory: React.FC<{ productCounts: Record<string, number> | null }> = ({ productCounts }) => {
+export const ShopByCategory: React.FC<{ categories: StorefrontCategory[]; productCounts: Record<string, number> | null }> = ({ categories, productCounts }) => {
   return (
     <section className="py-20 sm:py-28 bg-ivory-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -29,19 +31,20 @@ export const ShopByCategory: React.FC<{ productCounts: Record<string, number> | 
 
         {/* Categories Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {CATEGORIES.map((category) => (
-            <Link
+          {categories.map((category) => {
+            const image = getStorefrontCategoryImage(category.image, category.slug, CATEGORIES);
+            return <Link
               key={category.id}
               href={`/shop?category=${category.slug}`}
               className="group relative aspect-[3/4] overflow-hidden rounded-sm bg-ivory-200 border border-ivory-300"
             >
-              <Image
-                src={category.image}
+              {image ? <Image
+                src={image}
                 alt={category.name}
                 fill
                 className="object-cover transition-transform duration-700 ease-out group-hover:scale-110"
                 sizes="(max-width: 768px) 50vw, 25vw"
-              />
+              /> : <div className="absolute inset-0 grid place-items-center bg-gradient-to-br from-gold-100 to-charcoal-200 font-serif text-3xl text-charcoal-700">PH</div>}
 
               {/* Gradient Scrim */}
               <div className="absolute inset-0 bg-gradient-to-t from-charcoal-950/85 via-charcoal-950/20 to-transparent transition-opacity duration-300" />
@@ -49,7 +52,7 @@ export const ShopByCategory: React.FC<{ productCounts: Record<string, number> | 
               {/* Text Overlay */}
               <div className="absolute inset-x-0 bottom-0 p-5 text-ivory-50 flex flex-col justify-end">
                 <span className="text-[10px] uppercase tracking-widest text-gold-300 font-medium mb-1">
-                  {productCounts ? `${productCounts[category.slug] ?? 0} Handcrafted Items` : "Catalog count unavailable"}
+                  {getStorefrontCategoryCountLabel(productCounts, category.slug)}
                 </span>
                 <div className="flex items-center justify-between">
                   <h3 className="font-serif text-lg sm:text-xl font-bold text-white group-hover:text-gold-300 transition-colors">
@@ -63,8 +66,8 @@ export const ShopByCategory: React.FC<{ productCounts: Record<string, number> | 
                   {category.description}
                 </p>
               </div>
-            </Link>
-          ))}
+            </Link>;
+          })}
         </div>
       </div>
     </section>
