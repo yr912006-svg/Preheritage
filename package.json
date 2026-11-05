@@ -7,6 +7,13 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
+    "test:browser": "playwright test",
+    "test:unit": "node --import ./scripts/register-test-loader.mjs --test src/lib/*.test.mjs",
+    "test:integration": "node --import ./scripts/register-test-loader.mjs --test test/integration",
+    "test:integration:prepare": "node scripts/razorpay-integration-db.mjs prepare",
+    "browser-qa:setup": "node scripts/browser-qa-fixtures.mjs setup",
+    "browser-qa:status": "node scripts/browser-qa-fixtures.mjs status",
+    "browser-qa:cleanup": "node scripts/browser-qa-fixtures.mjs cleanup",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:seed": "node prisma/seed.js"
@@ -18,26 +25,31 @@
     "@neon/config": "^1.9.4",
     "@neon/env": "^1.6.5",
     "@prisma/client": "^5.14.0",
+    "@types/three": "^0.187.0",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
     "files-sdk": "^3.1.2",
-    "lucide-react": "^0.378.0",
-    "next": "^14.2.15",
+    "lucide-react": "^0.469.0",
+    "next": "^15.5.28",
     "next-auth": "^4.24.7",
     "razorpay": "^2.9.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "tailwind-merge": "^2.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.12.12",
-    "@types/react": "^18.3.2",
-    "@types/react-dom": "^18.3.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38",
+    "postcss": "^8.5.32",
     "prisma": "^5.14.0",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.4.5"
+  },
+  "overrides": {
+    "postcss": "$postcss"
   }
 }

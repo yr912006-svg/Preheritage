@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyRazorpaySignature } from "@/lib/razorpay";
+import { razorpayInstance } from "@/lib/razorpay";
+import { isCapturedPaymentForOrder } from "@/lib/payment-integrity";
 
 export async function POST(req: Request) {
   try {
@@ -31,8 +33,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Invalid payment signature." }, { status: 400 });
     }
 
-    // This endpoint verifies the signature only; order persistence happens separately.
-    return NextResponse.json({ success: true, message: "Payment signature verified", paymentId: razorpay_payment_id });
+    const [order, payment] = await Promise.all([
+      razorpayInstance.orders.fetch(razorpay_order_id),
+      razorpayInstance.payments.fetch(razorpay_payment_id),
+    ]);
+    if (order.id !== razorpay_order_id || payment.id !== razorpay_payment_id || !isCapturedPaymentForOrder(order, payment)) {
+      return NextResponse.json({ success: false, message: "Payment is not captured against the supplied Razorpay order." }, { status: 400 });
+    }
+
+    // Checkout independently repeats provider checks and persists the order transactionally.
+    return NextResponse.json({ success: true, message: "Payment verified", paymentId: razorpay_payment_id });
   } catch (error) {
     console.error("Payment verification error:", error);
     return NextResponse.json({ success: false, message: "Payment verification failed." }, { status: 500 });

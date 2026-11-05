@@ -1,27 +1,21 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { MessageCircle, ShieldCheck, Mail, ArrowRight, Sparkles, Heart } from "lucide-react";
+import { ArrowRight, Mail, MessageCircle } from "lucide-react";
 import Logo from "./Logo";
-import { CATEGORIES, REGIONS } from "@/lib/sample-data";
+import { CATEGORIES } from "@/lib/sample-data";
+import { WhatsAppContactLink } from "@/components/contact/WhatsAppContactLink";
+
+const linkClass = "inline-flex min-h-9 items-center text-[#D0C3AE] transition-colors hover:text-[#B08A45] focus-visible:text-[#B08A45]";
 
 export const Footer: React.FC = () => {
   const [email, setEmail] = useState("");
-  const [subscribed, setSubscribed] = useState(false);
+  const [subscribedMessage, setSubscribedMessage] = useState("");
   const [subscribeError, setSubscribeError] = useState("");
-  const [razorpayEnabled, setRazorpayEnabled] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    void fetch("/api/payments/config", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((config) => {
-      if (active) setRazorpayEnabled(config?.razorpayEnabled === true);
-    }).catch(() => undefined);
-    return () => { active = false; };
-  }, []);
-
-  const handleSubscribe = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubscribe = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!email) return;
     setSubscribeError("");
     try {
@@ -32,7 +26,7 @@ export const Footer: React.FC = () => {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.success) throw new Error(result.message || "Subscription could not be saved. Please try again.");
-      setSubscribed(true);
+      setSubscribedMessage(result.message || "You are subscribed to the PREHERITAGE newsletter.");
       setEmail("");
     } catch (error) {
       setSubscribeError(error instanceof Error ? error.message : "Subscription could not be saved. Please try again.");
@@ -40,230 +34,102 @@ export const Footer: React.FC = () => {
   };
 
   return (
-    <footer className="bg-charcoal-950 text-ivory-200 border-t border-charcoal-900 pt-16 pb-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Top Philosophy & Newsletter Banner */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 pb-16 border-b border-charcoal-800">
-          <div className="lg:col-span-6 space-y-4">
+    <footer className="border-t border-[rgba(248,242,231,0.18)] bg-[#24201D] text-[#F8F2E7]">
+      <div className="mx-auto max-w-7xl px-4 pb-8 pt-12 sm:px-6 sm:pb-10 sm:pt-16 lg:px-8">
+        <div className="grid gap-10 border-b border-[rgba(248,242,231,0.18)] pb-10 lg:grid-cols-12 lg:gap-14 lg:pb-14">
+          <div className="lg:col-span-5">
             <Logo variant="light" />
-            <p className="font-serif italic text-lg sm:text-xl text-ivory-100 max-w-lg mt-3">
-              &ldquo;Don’t Just Wear Heritage. Carry It Forward.&rdquo;
+            <p className="mt-5 max-w-md font-serif text-xl italic leading-relaxed text-[#F8F2E7] sm:text-2xl">
+              Indian soul. Global luxury. Timeless identity.
             </p>
-            <p className="text-xs text-ivory-400 max-w-md leading-relaxed font-light">
-              PREHERITAGE is dedicated to the revival of India&apos;s ancient looms, GI-certified handcrafts, and royal textile lineages. Indian Soul. Global Luxury. Timeless Elegance.
+            <p className="mt-2.5 max-w-md font-serif text-sm italic text-[#B08A45]">
+              Don&apos;t Just Wear Heritage. Carry It Forward.
             </p>
-            <div className="flex items-center gap-3 pt-2">
-              <a
-                href="https://wa.me/919876543210?text=Hello%20Preheritage%20Concierge,%20I%20need%20assistance%20with%20an%20order"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 rounded text-xs transition-colors"
-              >
-                <MessageCircle className="w-4 h-4 text-emerald-400" />
-                <span>WhatsApp Private Concierge</span>
-              </a>
-              <Link
-                href="/admin"
-                className="text-[11px] text-charcoal-300 hover:text-gold-400 transition-colors"
-              >
-                Admin Portal
-              </Link>
-            </div>
+            <p className="mt-2 max-w-md text-sm leading-6 text-[#D0C3AE]">
+              PREHERITAGE — Wear the Stories of India.
+            </p>
+            <WhatsAppContactLink
+              className="mt-5 inline-flex min-h-11 items-center gap-2 border-b border-[rgba(248,242,231,0.18)] text-xs font-medium uppercase tracking-[0.14em] text-[#D0C3AE] transition-colors hover:border-[#B08A45] hover:text-[#B08A45]"
+              message="Hello PREHERITAGE Concierge, I need assistance with an order"
+              fallbackHref="/contact"
+            >
+              <MessageCircle className="h-4 w-4 text-[#B08A45]" aria-hidden="true" />
+              Contact PREHERITAGE Concierge
+            </WhatsAppContactLink>
           </div>
 
-          <div className="lg:col-span-6 flex flex-col justify-center">
-            <div className="bg-charcoal-900/60 p-6 sm:p-8 rounded border border-charcoal-800">
-              <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold uppercase tracking-widest mb-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>The Preheritage Chronicle</span>
-              </div>
-              <h3 className="font-serif text-xl sm:text-2xl text-white font-medium mb-2">
-                Join our intimate circle of heritage patrons
-              </h3>
-              <p className="text-xs text-ivory-300 mb-4 font-light">
-                Receive private previews of limited-edition loom launches, cultural artisan narratives, and welcome privileges.
-              </p>
-
-              {subscribed ? (
-                <div className="p-3 bg-gold-950/60 border border-gold-700/60 rounded text-gold-300 text-xs flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-gold-400" />
-                  <span>Welcome to PREHERITAGE. Use code <strong>FIRSTWEAR</strong> on your first order.</span>
-                </div>
-              ) : (
-                <>
-                {subscribeError && <p role="alert" className="mb-2 text-xs text-rose-300">{subscribeError}</p>}
-                <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-2">
-                  <div className="relative flex-1">
-                    <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-charcoal-200" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Enter your email address"
-                      required
-                      className="w-full pl-9 pr-3 py-2.5 bg-charcoal-950 text-white border border-charcoal-700 rounded text-xs focus:outline-none focus:border-gold-500"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="px-6 py-2.5 bg-gold-500 hover:bg-gold-600 text-charcoal-950 text-xs uppercase tracking-widest font-semibold rounded flex items-center justify-center gap-2 transition-colors"
-                  >
-                    <span>Subscribe</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </form>
-                </>
-              )}
-            </div>
-          </div>
+          <section aria-labelledby="newsletter-heading" className="border-t border-[rgba(248,242,231,0.18)] pt-7 lg:col-span-7 lg:border-0 lg:pt-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-[#B08A45]">The Gazette</p>
+            <h2 id="newsletter-heading" className="mt-2 max-w-lg font-serif text-2xl font-normal text-[#F8F2E7] sm:text-3xl">Notes from PREHERITAGE</h2>
+            <p className="mt-2 max-w-lg text-sm leading-6 text-[#D0C3AE]">Sign up to receive invitations to private salon drops and artisan memoirs.</p>
+            {subscribedMessage ? (
+              <p role="status" className="mt-5 border-l-2 border-[#B08A45] py-2 pl-3 text-sm text-[#F8F2E7]">{subscribedMessage}</p>
+            ) : (
+              <form onSubmit={handleSubscribe} className="mt-5 flex max-w-xl flex-col gap-3 sm:flex-row">
+                <label className="relative min-w-0 flex-1">
+                  <span className="sr-only">Email address</span>
+                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#D0C3AE]" aria-hidden="true" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="Email address"
+                    autoComplete="email"
+                    required
+                    className="min-h-12 w-full border border-[rgba(248,242,231,0.18)] bg-transparent pl-10 pr-3 text-sm text-[#F8F2E7] placeholder:text-[#D0C3AE]/70 focus:border-[#B08A45] focus:outline-none transition-colors"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="cta-shimmer-btn inline-flex min-h-12 items-center justify-center gap-3 bg-[#F8F2E7] px-6 text-xs font-semibold uppercase tracking-[0.16em] text-[#24201D] transition-colors hover:bg-[#B08A45] hover:text-[#FAF8F5]"
+                >
+                  <span>Subscribe</span>
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </form>
+            )}
+            {subscribeError && <p role="alert" className="mt-3 text-sm text-rose-300">{subscribeError}</p>}
+          </section>
         </div>
 
-        {/* Links Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 py-12 border-b border-charcoal-800 text-xs">
-          {/* Col 1: Handcrafted Categories */}
+        <nav aria-label="Footer navigation" className="grid grid-cols-2 gap-x-5 gap-y-9 border-b border-[rgba(248,242,231,0.18)] py-9 text-xs sm:gap-x-8 md:grid-cols-4 md:py-11">
           <div>
-            <h4 className="font-serif text-sm uppercase tracking-wider text-gold-400 font-semibold mb-4">
-              Collections
-            </h4>
-            <ul className="space-y-2.5 text-ivory-400">
-              {CATEGORIES.map((cat) => (
-                <li key={cat.id}>
-                  <Link href={`/shop?category=${cat.slug}`} className="hover:text-gold-300 transition-colors">
-                    {cat.name}
-                  </Link>
-                </li>
-              ))}
+            <h2 className="mb-3 font-serif text-lg font-medium text-[#F8F2E7]">Shop</h2>
+            <ul className="space-y-1">
+              <li><Link href="/shop" className={linkClass}>All pieces</Link></li>
+              {CATEGORIES.map((category) => <li key={category.id}><Link href={`/shop?category=${category.slug}`} className={linkClass}>{category.name}</Link></li>)}
             </ul>
           </div>
-
-          {/* Col 2: Heritage Weaving Regions */}
           <div>
-            <h4 className="font-serif text-sm uppercase tracking-wider text-gold-400 font-semibold mb-4">
-              Regional Looms
-            </h4>
-            <ul className="space-y-2.5 text-ivory-400">
-              {REGIONS.map((r) => (
-                <li key={r.id}>
-                  <Link href={`/shop?region=${r.slug}`} className="hover:text-gold-300 transition-colors">
-                    {r.name} ({r.craft.split("&")[0]})
-                  </Link>
-                </li>
-              ))}
+            <h2 className="mb-3 font-serif text-lg font-medium text-[#F8F2E7]">The house</h2>
+            <ul className="space-y-1">
+              <li><Link href="/about" className={linkClass}>Our story</Link></li>
+              <li><Link href="/journal" className={linkClass}>Art &amp; Heritage</Link></li>
+              <li><Link href="/contact" className={linkClass}>Contact</Link></li>
             </ul>
           </div>
-
-          {/* Col 3: Customer Care */}
           <div>
-            <h4 className="font-serif text-sm uppercase tracking-wider text-gold-400 font-semibold mb-4">
-              Customer Care
-            </h4>
-            <ul className="space-y-2.5 text-ivory-400">
-              <li>
-                <Link href="/track-order" className="hover:text-gold-300 transition-colors">
-                  Track Your Order
-                </Link>
-              </li>
-              <li>
-                <Link href="/account/orders" className="hover:text-gold-300 transition-colors">
-                  Order History & Returns
-                </Link>
-              </li>
-              <li>
-                <Link href="/shipping-policy" className="hover:text-gold-300 transition-colors">
-                  Shipping & Delivery
-                </Link>
-              </li>
-              <li>
-                <Link href="/return-policy" className="hover:text-gold-300 transition-colors">
-                  Returns & Exchanges
-                </Link>
-              </li>
-              <li>
-                <Link href="/faq" className="hover:text-gold-300 transition-colors">
-                  Frequently Asked Questions
-                </Link>
-              </li>
-              <li>
-                <Link href="/contact" className="hover:text-gold-300 transition-colors">
-                  Contact Concierge
-                </Link>
-              </li>
+            <h2 className="mb-3 font-serif text-lg font-medium text-[#F8F2E7]">Customer care</h2>
+            <ul className="space-y-1">
+              <li><Link href="/track-order" className={linkClass}>Track an order</Link></li>
+              <li><Link href="/account/orders" className={linkClass}>Order history</Link></li>
+              <li><Link href="/faq" className={linkClass}>Frequently asked questions</Link></li>
             </ul>
           </div>
-
-          {/* Col 4: Preheritage House */}
           <div>
-            <h4 className="font-serif text-sm uppercase tracking-wider text-gold-400 font-semibold mb-4">
-              The House
-            </h4>
-            <ul className="space-y-2.5 text-ivory-400">
-              <li>
-                <Link href="/about" className="hover:text-gold-300 transition-colors">
-                  About Preheritage
-                </Link>
-              </li>
-              <li>
-                <Link href="/journal" className="hover:text-gold-300 transition-colors">
-                  Stories of India (Journal)
-                </Link>
-              </li>
-              <li>
-                <Link href="/shop?badge=LIMITED_EDITION" className="hover:text-gold-300 transition-colors">
-                  Master Artisan Archives
-                </Link>
-              </li>
-              <li>
-                <Link href="/terms" className="hover:text-gold-300 transition-colors">
-                  Terms & Conditions
-                </Link>
-              </li>
-              <li>
-                <Link href="/privacy-policy" className="hover:text-gold-300 transition-colors">
-                  Privacy Policy
-                </Link>
-              </li>
+            <h2 className="mb-3 font-serif text-lg font-medium text-[#F8F2E7]">Policies</h2>
+            <ul className="space-y-1">
+              <li><Link href="/shipping-policy" className={linkClass}>Shipping &amp; delivery</Link></li>
+              <li><Link href="/return-policy" className={linkClass}>Returns &amp; exchanges</Link></li>
+              <li><Link href="/terms" className={linkClass}>Terms &amp; conditions</Link></li>
+              <li><Link href="/privacy-policy" className={linkClass}>Privacy policy</Link></li>
             </ul>
           </div>
+        </nav>
 
-          {/* Col 5: Brand Trust & Official Identity */}
-          <div className="col-span-2 sm:col-span-1">
-            <h4 className="font-serif text-sm uppercase tracking-wider text-gold-400 font-semibold mb-4">
-              Official Verification
-            </h4>
-            <p className="text-[11px] text-ivory-400 leading-relaxed mb-3">
-              Official Registered Domain: <strong>preheritage.com</strong>.
-              Every creation is certified for genuine GI craft lineage.
-            </p>
-            <div className="p-3 bg-charcoal-900 border border-charcoal-800 rounded space-y-2 text-[10px]">
-              <div className="flex items-center gap-1.5 text-gold-400">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span className="font-semibold">{razorpayEnabled ? "Razorpay Secure Payments Available" : "Cash on Delivery Available"}</span>
-              </div>
-              <div className="text-ivory-400">
-                Delivery updates are shared after dispatch.
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Bar: Payments & Copyright */}
-        <div className="pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] text-ivory-400">
-          <div>
-            © {new Date().getFullYear()} PREHERITAGE. All Rights Reserved. Woven with{" "}
-            <Heart className="w-3 h-3 inline text-rose-500 fill-rose-500" /> for Indian Heritage.
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <span className="w-full text-center text-[10px] uppercase tracking-wider text-charcoal-300 sm:w-auto sm:text-left sm:mr-2">Payment options:</span>
-            {[...(razorpayEnabled ? ["Razorpay"] : []), "Cash on Delivery"].map((method) => (
-              <span
-                key={method}
-                className="px-2 py-0.5 bg-charcoal-900 border border-charcoal-800 rounded text-[10px] text-ivory-300 font-mono"
-              >
-                {method}
-              </span>
-            ))}
-          </div>
+        <div className="flex flex-col gap-3 pt-6 text-[11px] text-[#D0C3AE] sm:flex-row sm:items-center sm:justify-between">
+          <p>© {new Date().getFullYear()} PREHERITAGE. All rights reserved.</p>
+          <p>Wear the Stories of India.</p>
         </div>
       </div>
     </footer>

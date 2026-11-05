@@ -78,6 +78,15 @@ test("refresh normalization drops stale zero-quantity and zero-price local entri
   assert.equal(restored[0].quantity, 1);
 });
 
+test("normalizing a refreshed line clamps quantity to the current server stock", () => {
+  const valid = createCartItem(product, "Free Size", "Antique Gold", 1).item;
+  assert.ok(valid);
+  const refreshed = normalizeCartItems([{ ...valid, quantity: 6, maxStock: 2, price: 13999 }]);
+  assert.equal(refreshed[0].quantity, 2);
+  assert.equal(refreshed[0].price, 13999);
+  assert.equal(refreshed[0].maxStock, 2);
+});
+
 test("checkout item validation rejects quantity zero and coalesces duplicate product/variant lines", () => {
   assert.match(normalizeCheckoutItems([{ productId: "p1", quantity: 0 }]).error, /invalid/i);
   assert.deepEqual(normalizeCheckoutItems([

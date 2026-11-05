@@ -3,10 +3,11 @@ import { getNeonFiles, isValidStorageKey } from "@/lib/neon-storage";
 
 export const runtime = "nodejs";
 
-type RouteContext = { params: { key: string[] } };
+type RouteContext = { params: Promise<{ key: string[] }> };
 
 export async function GET(_request: Request, { params }: RouteContext) {
-  const key = params.key.join("/");
+  const { key: pathSegments } = await params;
+  const key = pathSegments.join("/");
   if (!isValidStorageKey(key)) {
     return NextResponse.json({ error: "Invalid object key." }, { status: 400 });
   }

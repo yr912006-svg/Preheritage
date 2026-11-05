@@ -68,7 +68,7 @@ function numberValue(value: unknown) {
 }
 
 export function isAllowedProductImageUrl(value: string) {
-  if (/^\/api\/storage\/products\/[A-Za-z0-9._/-]+$/.test(value)) return !value.split("/").some((part) => part === ".." || part === ".");
+  if (/^\/(?:api\/storage\/products|images\/products)\/[A-Za-z0-9._/-]+$/.test(value)) return !value.split("/").some((part) => part === ".." || part === ".");
   try {
     const url = new URL(value);
     return url.protocol === "https:" && ["images.unsplash.com", "res.cloudinary.com", "lh3.googleusercontent.com", "plus.unsplash.com"].includes(url.hostname);

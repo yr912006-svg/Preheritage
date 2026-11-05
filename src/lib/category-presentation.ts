@@ -31,7 +31,11 @@ export function getStorefrontCategoryImage(
 export function getStorefrontCategoryCountLabel(
   productCounts: Record<string, number> | null,
   slug: string,
+  fallbackLabel: string = "Curated Collection",
 ): string {
   const count = productCounts?.[slug];
-  return typeof count === "number" ? `${count} Handcrafted Items` : "Catalog count unavailable";
+  if (typeof count === "number" && count > 0) {
+    return count === 1 ? "1 Handcrafted Item" : `${count} Handcrafted Items`;
+  }
+  return fallbackLabel;
 }

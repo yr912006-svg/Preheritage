@@ -4,35 +4,56 @@ import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Heart, ShoppingBag, Eye } from "lucide-react";
-import { ProductItem } from "@/lib/sample-data";
+import { ProductItem, SAMPLE_PRODUCTS } from "@/lib/sample-data";
 import { formatPrice } from "@/lib/utils";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { createCartItem } from "@/lib/cart-model";
+import { QuickViewModal } from "./QuickViewModal";
 
 interface ProductCardProps {
   product: ProductItem;
+  compact?: boolean;
+  className?: string;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({
+  product,
+  compact = false,
+  className = "",
+}) => {
   const { addToCart } = useCart();
-  const { toggleWishlist, isInWishlist } = useWishlist();
+  const { toggleWishlist, isInWishlist, wishlistReady } = useWishlist();
   const [isHovered, setIsHovered] = useState(false);
-  const [selectedSize, setSelectedSize] = useState(product.sizes[0] || "Standard");
+  const [isQuickViewOpen, setIsQuickViewOpen] = useState(false);
+  const [selectedSize, setSelectedSize] = useState(product.sizes[0] || "Free Size");
   const [unavailableImages, setUnavailableImages] = useState<string[]>([]);
   const [quickAddMessage, setQuickAddMessage] = useState("");
   const quickAddAvailable = Boolean(createCartItem(product, selectedSize, product.colors[0]?.name, 1).item);
 
   const isFavorited = isInWishlist(product.id);
-  const primaryImage = product.images[0];
-  const secondaryImage = product.images[1] || product.images[0];
-  const displayImage = isHovered ? secondaryImage : primaryImage;
+  const sampleProduct = SAMPLE_PRODUCTS.find((p) => p.slug === product.slug || p.id === product.id);
+  const resolvedImages =
+    product.images && product.images.length > 0 && !product.images[0].includes("images.unsplash.com")
+      ? product.images
+      : sampleProduct?.images || product.images || [];
+  const primaryImage = resolvedImages[0];
+  const secondaryImage = resolvedImages[1] || resolvedImages[0];
+  const hasDistinctSecondary = Boolean(
+    secondaryImage && secondaryImage !== primaryImage && !unavailableImages.includes(secondaryImage)
+  );
 
   const handleQuickAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const result = addToCart(product, selectedSize, product.colors[0]?.name, 1);
-    if (!result.success) setQuickAddMessage(result.message || "This selection is unavailable.");
+    if (!result.success) {
+      setQuickAddMessage(result.message || "This selection is unavailable.");
+      setTimeout(() => setQuickAddMessage(""), 3000);
+    } else {
+      setQuickAddMessage("Added to Bag");
+      setTimeout(() => setQuickAddMessage(""), 3000);
+    }
   };
 
   const handleWishlistClick = (e: React.MouseEvent) => {
@@ -41,152 +62,229 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     toggleWishlist(product);
   };
 
-  // Badge configuration
   const renderBadge = () => {
-    if (!product.badge) return null;
+    const badgeType = product.badge || (product.isBestSeller ? "BESTSELLER" : undefined);
+    if (!badgeType) return null;
+    if (badgeType === "SALE" && (product.mrp <= product.price || !product.discount)) {
+      return null;
+    }
+
     const styles: Record<string, string> = {
-      NEW: "bg-charcoal-900 text-ivory-50",
-      BESTSELLER: "bg-gold-600 text-white",
-      SALE: "bg-heritage-crimson text-white",
-      LIMITED_EDITION: "bg-gold-700 text-white font-semibold",
-      LOW_STOCK: "bg-amber-600 text-white",
+      NEW: "bg-charcoal text-ivory",
+      BESTSELLER: "bg-[#24201D] text-[#FAF8F5] font-medium",
+      SALE: "bg-burgundy text-white font-semibold",
+      LIMITED_EDITION: "bg-stone-800 text-gold",
+      LOW_STOCK: "bg-amber-800 text-white",
     };
     const labels: Record<string, string> = {
       NEW: "New Arrival",
       BESTSELLER: "Bestseller",
       SALE: `${product.discount}% Off`,
-      LIMITED_EDITION: "Limited Edition",
-      LOW_STOCK: "Only Few Left",
+      LIMITED_EDITION: "Single-Loom",
+      LOW_STOCK: "Few in Vault",
     };
 
     return (
       <span
-        className={`absolute top-3 left-3 z-10 px-2.5 py-1 text-[10px] uppercase tracking-widest font-sans font-medium rounded-xs shadow-sm ${
-          styles[product.badge] || "bg-charcoal-900 text-white"
+        className={`absolute top-2.5 left-2.5 z-10 px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] font-sans font-medium shadow-xs ${
+          styles[badgeType] || "bg-charcoal text-white"
         }`}
       >
-        {labels[product.badge] || product.badge}
+        {labels[badgeType] || badgeType}
       </span>
     );
   };
 
   return (
-    <div
-      className="group relative flex flex-col bg-ivory-50 rounded-sm overflow-hidden border border-ivory-200 hover:border-gold-300 transition-all duration-300 hover:shadow-luxury"
+    <article
+      className={`group relative flex flex-col bg-white border border-stone-200 transition-all duration-300 hover:border-[#B08A45] ${
+        compact ? "w-full max-w-[236px] hover:shadow-xs" : "hover:border-gold hover:shadow-luxury"
+      } ${className}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Product Image Frame */}
-      <div className="relative aspect-[3/4] w-full overflow-hidden bg-ivory-200">
+      {/* Product Image Frame with Museum Ratio */}
+      <div className="relative aspect-[3/4] w-full overflow-hidden bg-stone-100">
         {renderBadge()}
 
         {/* Wishlist Button */}
         <button
           onClick={handleWishlistClick}
-          className="absolute top-3 right-3 z-10 p-2 rounded-full bg-white/80 backdrop-blur-sm text-charcoal-800 hover:text-heritage-crimson hover:bg-white transition-all shadow-sm"
-          aria-label="Save to wishlist"
+          disabled={!wishlistReady}
+          className={`absolute right-2.5 top-2.5 z-10 inline-flex items-center justify-center bg-white/90 backdrop-blur-sm border border-stone-200 text-charcoal transition-colors hover:text-burgundy focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold ${
+            compact ? "h-8 w-8" : "h-9 w-9"
+          }`}
+          aria-label={isFavorited ? `Remove ${product.title} from favorites` : `Add ${product.title} to favorites`}
+          aria-pressed={isFavorited}
+          aria-busy={!wishlistReady}
         >
           <Heart
-            className={`w-4 h-4 transition-colors ${
-              isFavorited ? "text-heritage-crimson fill-heritage-crimson" : ""
+            className={`w-3.5 h-3.5 transition-colors ${
+              isFavorited ? "text-burgundy fill-burgundy" : ""
             }`}
           />
         </button>
 
-        {/* Image link */}
-        <Link href={`/products/${product.slug}`} className="block w-full h-full">
-          {displayImage && !unavailableImages.includes(displayImage) ? <Image
-            src={displayImage}
-            alt={product.title}
-            fill
-            unoptimized={displayImage.startsWith("/api/storage/")}
-            onError={() => setUnavailableImages((current) => current.includes(displayImage) ? current : [...current, displayImage])}
-            className="object-cover object-top transition-all duration-700 ease-out group-hover:scale-105"
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-          /> : <span className="grid h-full w-full place-items-center font-serif text-2xl font-bold text-gold-700" aria-label="Product image unavailable">PH</span>}
+        {/* Quick View Button */}
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsQuickViewOpen(true);
+          }}
+          className="absolute right-3 top-14 z-10 inline-flex h-9 w-9 items-center justify-center bg-white/90 backdrop-blur-sm border border-stone-200 text-charcoal transition-colors hover:text-gold-700 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+          aria-label={`Quick view ${product.title}`}
+          title="Quick View"
+        >
+          <Eye className="w-4 h-4" />
+        </button>
+
+        {/* Product Image Link */}
+        <Link
+          href={`/products/${product.slug}`}
+          className="relative block w-full h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2"
+        >
+          {primaryImage && !unavailableImages.includes(primaryImage) ? (
+            <>
+              <Image
+                src={primaryImage}
+                alt={product.title}
+                fill
+                unoptimized={primaryImage.startsWith("/api/storage/")}
+                onError={() =>
+                  setUnavailableImages((current) =>
+                    current.includes(primaryImage) ? current : [...current, primaryImage]
+                  )
+                }
+                className={`object-cover object-top transition-all duration-700 ease-out group-hover:scale-105 ${
+                  hasDistinctSecondary && isHovered ? "opacity-0" : "opacity-100"
+                }`}
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+              />
+              {hasDistinctSecondary && (
+                <Image
+                  src={secondaryImage}
+                  alt={`${product.title} detailed craft view`}
+                  fill
+                  unoptimized={secondaryImage.startsWith("/api/storage/")}
+                  onError={() =>
+                    setUnavailableImages((current) =>
+                      current.includes(secondaryImage) ? current : [...current, secondaryImage]
+                    )
+                  }
+                  className={`object-cover object-top transition-all duration-700 ease-out group-hover:scale-105 ${
+                    isHovered ? "opacity-100" : "opacity-0"
+                  }`}
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                />
+              )}
+            </>
+          ) : (
+            <span
+              className="grid h-full w-full place-items-center font-serif text-2xl font-light text-gold"
+              aria-label="Product image unavailable"
+            >
+              PREHERITAGE
+            </span>
+          )}
         </Link>
 
-        {/* Quick Add Overlay on Desktop Hover */}
-        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-charcoal-950/80 via-charcoal-950/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col gap-2">
-          {product.sizes.length > 1 && (
-            <div className="flex justify-center gap-1.5">
-              {product.sizes.slice(0, 5).map((size) => (
-                <button
-                  key={size}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setSelectedSize(size);
-                    setQuickAddMessage("");
-                  }}
-                  className={`px-2 py-0.5 text-[10px] font-semibold uppercase rounded transition-colors ${
-                    selectedSize === size
-                      ? "bg-gold-500 text-charcoal-950"
-                      : "bg-white/80 text-charcoal-900 hover:bg-white"
-                  }`}
-                >
-                  {size}
-                </button>
-              ))}
-            </div>
+        {/* Quick Add / Quick View Actions */}
+        <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1.5 bg-gradient-to-t from-charcoal/90 via-charcoal/60 to-transparent p-3 opacity-100 transition-opacity duration-300 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsQuickViewOpen(true);
+              }}
+              className="min-h-10 w-full bg-white/95 px-2 py-2 font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-charcoal transition-colors hover:bg-gold hover:text-charcoal flex items-center justify-center gap-1.5 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+              aria-label={`Quick preview for ${product.title}`}
+            >
+              <Eye className="w-3.5 h-3.5 text-gold-700" />
+              <span>Quick View</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleQuickAdd}
+              disabled={!quickAddAvailable}
+              className="min-h-10 w-full bg-charcoal-900 px-2 py-2 font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-ivory-50 transition-colors hover:bg-gold hover:text-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold disabled:cursor-not-allowed disabled:bg-stone-400 disabled:text-stone-200 flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-gold" />
+              <span>{quickAddAvailable ? "Reserve" : "Sold Out"}</span>
+            </button>
+          </div>
+          {quickAddMessage && (
+            <span role="status" className="text-center text-[10px] text-ivory font-mono">
+              {quickAddMessage}
+            </span>
           )}
-
-          <button
-            onClick={handleQuickAdd}
-            disabled={!quickAddAvailable}
-            className="w-full py-2.5 bg-ivory-50 hover:bg-gold-500 disabled:bg-ivory-200 disabled:text-charcoal-400 disabled:cursor-not-allowed text-charcoal-950 hover:text-charcoal-950 font-sans text-xs uppercase tracking-widest font-semibold flex items-center justify-center gap-2 transition-colors rounded-xs shadow-md"
-          >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span>{quickAddAvailable ? "Add to Bag" : "Unavailable"}</span>
-          </button>
-          {quickAddMessage && <span role="status" className="text-center text-[10px] text-ivory-50">{quickAddMessage}</span>}
         </div>
       </div>
 
       {/* Product Information */}
-      <div className="p-4 flex flex-col flex-1 justify-between">
+      <div className={`flex flex-1 flex-col justify-between bg-white ${compact ? "p-3 sm:p-3.5" : "p-4"}`}>
         <div>
-          {/* Region / Category Breadcrumb */}
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-gold-600 font-medium mb-1">
-            <span>{product.state || product.region}</span>
-            <span className="text-charcoal-100 font-sans">{product.category}</span>
+          {/* Region / Category Overline */}
+          <div className="mb-1 flex items-center justify-between gap-1 text-[9.5px] font-medium uppercase tracking-[0.18em] text-[#B08A45]">
+            <span className="truncate">{product.state || product.region || "Heritage Handloom"}</span>
+            <span className="text-stone-400 font-sans truncate">{product.category}</span>
           </div>
 
           {/* Product Title */}
-          <Link href={`/products/${product.slug}`} className="block group-hover:text-gold-700 transition-colors">
-            <h3 className="font-serif text-sm sm:text-base font-semibold text-charcoal-900 line-clamp-2 leading-snug">
+          <Link href={`/products/${product.slug}`} className="block group-hover:text-[#B08A45] transition-colors">
+            <h3 className={`font-serif font-light leading-snug text-charcoal ${
+              compact ? "line-clamp-1 text-sm sm:text-[15px]" : "line-clamp-2 text-lg sm:text-xl"
+            }`}>
               {product.title}
             </h3>
           </Link>
 
-          {/* Short Story snippet */}
-          <p className="text-[11px] text-charcoal-100 mt-1 line-clamp-1 font-light">
-            {product.shortDesc}
-          </p>
+          {/* Short Truncated Description */}
+          {(product.shortDesc || product.description) && (
+            <p className="mt-1 line-clamp-2 text-[11px] text-stone-500 font-light leading-relaxed">
+              {product.shortDesc || product.description}
+            </p>
+          )}
         </div>
 
-        {/* Pricing & Rating */}
-        <div className="mt-3 pt-3 border-t border-ivory-200 flex items-center justify-between">
-          <div className="flex items-baseline gap-2">
-            <span className="font-serif font-bold text-base sm:text-lg text-charcoal-900">
+        {/* Pricing & Rating Integrity */}
+        <div className={`flex items-center justify-between gap-2 border-t border-stone-200/80 ${compact ? "mt-3 pt-2" : "mt-4 pt-3"}`}>
+          <div className="flex items-baseline gap-1.5">
+            <span className={`font-serif font-medium text-charcoal ${compact ? "text-base sm:text-lg" : "text-xl sm:text-2xl"}`}>
               {formatPrice(product.price)}
             </span>
             {product.mrp > product.price && (
-              <span className="text-xs text-charcoal-50 line-through">
+              <span className="text-xs text-stone-400 line-through">
                 {formatPrice(product.mrp)}
               </span>
             )}
           </div>
 
-          {/* Star Rating */}
-          <div className="flex items-center text-[11px] text-charcoal-200">
-            <span className="text-amber-500 mr-1">★</span>
-            <span className="font-medium">{product.rating}</span>
-            <span className="text-charcoal-50 text-[10px] ml-1">({product.reviewCount})</span>
+          <div className="flex items-center text-[11px] text-stone-500">
+            {product.reviewCount > 0 ? (
+              <>
+                <span className="text-amber-500 mr-1">★</span>
+                <span className="font-medium text-charcoal">{product.rating}</span>
+                <span className="text-stone-400 text-[10px] ml-1">({product.reviewCount})</span>
+              </>
+            ) : (
+              <span className="text-[10px] text-gold uppercase tracking-[0.16em] font-medium">
+                Vault Edition
+              </span>
+            )}
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Quick View Modal */}
+      <QuickViewModal
+        product={product}
+        isOpen={isQuickViewOpen}
+        onClose={() => setIsQuickViewOpen(false)}
+      />
+    </article>
   );
 };
 

@@ -64,7 +64,7 @@ export async function PATCH(request: Request) {
     const quantity = Number(body?.quantity);
     if (!productId || !Number.isInteger(quantity) || quantity < 1 || quantity > 20) return NextResponse.json({ message: "Invalid cart quantity." }, { status: 400 });
     const available = await getAvailable(productId, variantId);
-    if (!available || available.stock < quantity) return NextResponse.json({ message: "There is not enough stock for that quantity." }, { status: 409 });
+    if (!available || available.stock < quantity) return NextResponse.json({ message: "There is not enough stock for that quantity. Refresh your bag and try again." }, { status: 409 });
     const existing = await prisma.cartItem.findFirst({ where: { userId: user.id, productId, variantId } });
     if (!existing) return NextResponse.json({ message: "Cart item not found." }, { status: 404 });
     await prisma.cartItem.update({ where: { id: existing.id }, data: { quantity } });

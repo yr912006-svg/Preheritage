@@ -20,6 +20,7 @@ export const ADMIN_CAPABILITIES = [
   "returns.manage",
   "refunds.execute",
   "coupons.manage",
+  "content.manage",
   "reviews.moderate",
   "inquiries.general.manage",
   "inquiries.order.manage",
@@ -46,6 +47,7 @@ const ROLE_CAPABILITIES: Record<AdminRole, ReadonlySet<AdminCapability>> = {
     "inquiries.order.manage",
   ]),
   CONTENT_MANAGER: new Set<AdminCapability>([
+    "content.manage",
     "reviews.moderate",
     "inquiries.general.manage",
   ]),

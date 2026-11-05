@@ -6,16 +6,16 @@ import { Sparkles, Globe, ShieldCheck } from "lucide-react";
 
 const announcements = [
   {
+    text: "Now Shipping Globally to USA, UK, UAE, Canada & 40+ Countries",
+    icon: Globe,
+  },
+  {
     text: "Complimentary Express Delivery on all Indian orders above ₹4,999",
     icon: Sparkles,
   },
   {
     text: "Many Stories. One Thread — Handcrafted GI-Certified Heritage Weaves",
     icon: ShieldCheck,
-  },
-  {
-    text: "Now Shipping Globally to USA, UK, UAE, Canada & 40+ Countries",
-    icon: Globe,
   },
 ];
 
@@ -33,9 +33,9 @@ export const AnnouncementBar: React.FC = () => {
   const Icon = current.icon;
 
   return (
-    <div className="bg-charcoal-900 text-ivory-100 py-2 px-4 text-xs font-sans border-b border-charcoal-800 transition-colors duration-500">
+    <div className="bg-charcoal-900 text-ivory-100 py-2 px-4 text-xs font-sans border-b border-charcoal-800 transition-colors duration-300">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
-        <div className="hidden md:flex items-center gap-4 text-ivory-300 text-[11px] tracking-wider uppercase">
+        <div className="hidden lg:flex items-center gap-4 text-ivory-300 text-[11px] tracking-wider uppercase">
           <span>Official Store</span>
           <span>•</span>
           <span className="text-gold-400">preheritage.com</span>
@@ -43,12 +43,12 @@ export const AnnouncementBar: React.FC = () => {
 
         <div className="flex-1 flex items-center justify-center gap-2 text-center text-xs tracking-wide">
           <Icon className="w-3.5 h-3.5 text-gold-400 shrink-0 animate-pulse" />
-          <span className="font-light text-ivory-100 transition-all duration-300">
+          <span className="font-light text-ivory-100 transition-all duration-300 drop-shadow-sm">
             {current.text}
           </span>
         </div>
 
-        <div className="hidden md:flex items-center gap-3 text-ivory-300 text-[11px]">
+        <div className="hidden lg:flex items-center gap-3 text-ivory-300 text-[11px]">
           <Link href="/track-order" className="hover:text-gold-300 transition-colors">
             Track Order
           </Link>

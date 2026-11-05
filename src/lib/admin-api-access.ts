@@ -13,6 +13,14 @@ export const ADMIN_API_CAPABILITIES = {
     path: "/api/admin/inventory",
     methods: { GET: "inventory.read", PATCH: "inventory.manage" },
   },
+  coupons: {
+    path: "/api/admin/coupons",
+    methods: { GET: "coupons.manage", POST: "coupons.manage", PATCH: "coupons.manage" },
+  },
+  content: {
+    path: "/api/admin/content",
+    methods: { GET: "content.manage", PATCH: "content.manage" },
+  },
   orders: {
     path: "/api/admin/orders",
     methods: { GET: "orders.read", PATCH: "orders.manage" },
@@ -24,6 +32,10 @@ export const ADMIN_API_CAPABILITIES = {
       PATCH: "inquiries.general.manage",
       DELETE: "inquiries.general.manage",
     },
+  },
+  returns: {
+    path: "/api/admin/returns",
+    methods: { GET: "returns.manage", PATCH: "returns.manage" },
   },
   productImageUpload: {
     path: "/api/storage/upload",

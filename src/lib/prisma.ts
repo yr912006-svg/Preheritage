@@ -1,17 +1,24 @@
 import { PrismaClient } from '@prisma/client';
 
-// Next.js runs on Node.js here, so the existing Prisma PostgreSQL driver is
-// appropriate. Neon supplies the pooled DATABASE_URL for requests and the
-// direct DATABASE_URL_UNPOOLED for Prisma schema operations.
+// Next.js runs on Node.js. Neon supplies the pooled DATABASE_URL for runtime
+// queries and the direct DATABASE_URL_UNPOOLED for Prisma schema operations.
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-
-export const prisma =
-  globalForPrisma.prisma ||
-  new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+const prismaClientSingleton = () => {
+  return new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   });
+};
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+type PrismaClientSingleton = ReturnType<typeof prismaClientSingleton>;
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClientSingleton | undefined;
+};
+
+export const prisma = globalForPrisma.prisma ?? prismaClientSingleton();
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma;
+}
 
 export default prisma;

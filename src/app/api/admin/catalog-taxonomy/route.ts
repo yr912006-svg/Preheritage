@@ -3,10 +3,11 @@ import prisma from "@/lib/prisma";
 import { requireAdminCapability } from "@/lib/account-auth";
 import { adminAuditStore } from "@/lib/admin-audit";
 import { ADMIN_API_CAPABILITIES, withAdminCapability } from "@/lib/admin-api-access";
-import { normalizeTaxonomyInput, TAXONOMY_KINDS, type TaxonomyKind } from "@/lib/catalog-taxonomy";
+import { ensureDefaultTaxonomy, normalizeTaxonomyInput, TAXONOMY_KINDS, type TaxonomyKind } from "@/lib/catalog-taxonomy";
 
 async function getTaxonomy(_request: Request) {
   try {
+    await ensureDefaultTaxonomy();
     const [categories, collections, regions] = await Promise.all([
       prisma.category.findMany({ orderBy: [{ orderIndex: "asc" }, { name: "asc" }], include: { subcategories: { orderBy: { name: "asc" } } } }),
       prisma.collection.findMany({ orderBy: { name: "asc" } }),

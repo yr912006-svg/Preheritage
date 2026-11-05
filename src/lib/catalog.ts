@@ -14,7 +14,16 @@ export const catalogProductInclude = {
 
 export type CatalogProduct = Prisma.ProductGetPayload<{ include: typeof catalogProductInclude }>;
 
-export type StorefrontCategory = { id: string; name: string; slug: string; description: string | null; image: string | null; orderIndex: number };
+export type StorefrontCategory = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  image: string | null;
+  imageAlt?: string | null;
+  focalPoint?: string | null;
+  orderIndex: number;
+};
 export type StorefrontCollection = { id: string; name: string; slug: string; tagline: string | null; description: string | null; bannerImage: string | null };
 export type StorefrontRegion = { id: string; name: string; slug: string; state: string; culturalStory: string; craftForm: string; bannerImage: string | null };
 
