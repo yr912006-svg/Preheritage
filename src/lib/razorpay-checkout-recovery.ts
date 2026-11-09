@@ -160,19 +160,21 @@ async function finalizeCapturedCheckout(intentId: string, gatewayOrder: any, gat
       const couponLocks = coupon.coupon
         ? couponUsageLockKeys({ couponCode: coupon.coupon.code, userId: intent.userId, email })
         : [];
-      await withCouponUsageLocks(
-        [...orderLocks, ...couponLocks],
-        async (key) => { await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0)) IS NULL AS locked`; },
-        async () => {
-          if (!coupon.coupon || !identityFilter.length) return;
-          const [count, firstOrderCount] = await Promise.all([
-            tx.order.count({ where: { couponCode: coupon.coupon.code, OR: identityFilter } }),
-            coupon.coupon.firstOrderOnly ? tx.order.count({ where: { OR: identityFilter } }) : Promise.resolve(0),
-          ]);
-          if (coupon.coupon.usagePerUser > 0 && count >= coupon.coupon.usagePerUser) throw new CheckoutRecoveryError("Customer coupon limit has been reached.", "COUPON_CUSTOMER_LIMIT");
-          if (coupon.coupon.firstOrderOnly && firstOrderCount > 0) throw new CheckoutRecoveryError("Coupon is restricted to a first order.", "COUPON_FIRST_ORDER_ONLY");
-        },
-      );
+      if (coupon.coupon) {
+        await withCouponUsageLocks(
+          [...orderLocks, ...couponLocks],
+          async (key) => { await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0)) IS NULL AS locked`; },
+          async () => {
+            if (!identityFilter.length) return;
+            const [count, firstOrderCount] = await Promise.all([
+              tx.order.count({ where: { couponCode: coupon.coupon.code, OR: identityFilter } }),
+              coupon.coupon.firstOrderOnly ? tx.order.count({ where: { OR: identityFilter } }) : Promise.resolve(0),
+            ]);
+            if (coupon.coupon.usagePerUser > 0 && count >= coupon.coupon.usagePerUser) throw new CheckoutRecoveryError("Customer coupon limit has been reached.", "COUPON_CUSTOMER_LIMIT");
+            if (coupon.coupon.firstOrderOnly && firstOrderCount > 0) throw new CheckoutRecoveryError("Coupon is restricted to a first order.", "COUPON_FIRST_ORDER_ONLY");
+          },
+        );
+      }
       if (coupon.coupon) {
         const update = await tx.coupon.updateMany({
           where: { id: coupon.coupon.id, isActive: true, startDate: { lte: now() }, endDate: { gte: now() }, ...(coupon.coupon.usageLimit !== null ? { usedCount: { lt: coupon.coupon.usageLimit } } : {}) },
@@ -206,6 +208,9 @@ async function finalizeCapturedCheckout(intentId: string, gatewayOrder: any, gat
       await deps.hooks?.afterOrderCreated?.(created);
       await tx.razorpayCheckout.update({ where: { id: intent.id }, data: { status: "FINALIZED", orderId: created.id, recoveryReason: null } });
       return created;
+    }, {
+      maxWait: 15000,
+      timeout: 30000,
     });
     return order;
   } catch (error: any) {
