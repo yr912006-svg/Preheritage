@@ -409,7 +409,8 @@ export async function POST(req: Request) {
           console.error(`[PREHERITAGE Checkout] Idempotency lookup failed: ${sanitizeDbError(checkErr)}`);
         }
 
-        // If the lookup failed, outcome cannot be safely determined
+        // Gate 11.12.8: If idempotency lookup failed (connection error, P2028, or P2034),
+        // transaction outcome cannot be safely determined. Unconditionally abort to prevent duplicate orders.
         if (committedCheckFailed) {
           console.error(
             "[PREHERITAGE Checkout] Cannot safely determine transaction outcome. Aborting retry to prevent duplicate order."
