@@ -86,30 +86,53 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([fetch("/api/account/profile"), fetch("/api/account/addresses")]).then(async ([profileResponse, addressResponse]) => {
-      if (!active) return;
-      const [profileData, addressData] = await Promise.all([profileResponse.json(), addressResponse.json()]);
-      const profile = profileData.profile;
-      const addresses = Array.isArray(addressData.addresses) ? addressData.addresses : [];
-      setSavedAddresses(addresses);
-      const address = selectCheckoutAddress(addresses);
-      setSelectedAddressId(address?.id ?? "");
-      if (!profile && !address) return;
-      setFormData((current) => ({
-        ...current,
-        fullName: address?.fullName ?? profile?.name ?? current.fullName,
-        email: profile?.email ?? current.email,
-        phone: address?.phone ?? profile?.phone ?? current.phone,
-        houseFlat: address?.houseFlat ?? current.houseFlat,
-        area: address?.area ?? current.area,
-        landmark: address?.landmark ?? current.landmark,
-        city: address?.city ?? current.city,
-        state: address?.state ?? current.state,
-        pincode: address?.pincode ?? current.pincode,
-        country: address?.country ?? current.country,
-      }));
-    }).catch(() => {});
-    return () => { active = false; };
+    fetch("/api/auth/session", { cache: "no-store" })
+      .then(async (res) => {
+        if (!active) return;
+        const session = res.ok ? await res.json() : null;
+        const user = session?.user as { id?: string; role?: string } | undefined;
+        const isCustomer = Boolean(user?.id && user.role === "CUSTOMER");
+        if (!isCustomer || !active) return;
+
+        const [profileResponse, addressResponse] = await Promise.all([
+          fetch("/api/account/profile"),
+          fetch("/api/account/addresses"),
+        ]);
+        if (!active) return;
+        if (!profileResponse.ok || !addressResponse.ok) return;
+
+        const [profileData, addressData] = await Promise.all([
+          profileResponse.json(),
+          addressResponse.json(),
+        ]);
+        if (!active) return;
+
+        const profile = profileData?.profile;
+        const addresses = Array.isArray(addressData?.addresses) ? addressData.addresses : [];
+        setSavedAddresses(addresses);
+        const address = selectCheckoutAddress(addresses);
+        setSelectedAddressId(address?.id ?? "");
+        if (!profile && !address) return;
+
+        setFormData((current) => ({
+          ...current,
+          fullName: address?.fullName ?? profile?.name ?? current.fullName,
+          email: profile?.email ?? current.email,
+          phone: address?.phone ?? profile?.phone ?? current.phone,
+          houseFlat: address?.houseFlat ?? current.houseFlat,
+          area: address?.area ?? current.area,
+          landmark: address?.landmark ?? current.landmark,
+          city: address?.city ?? current.city,
+          state: address?.state ?? current.state,
+          pincode: address?.pincode ?? current.pincode,
+          country: address?.country ?? current.country,
+        }));
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Shipping & Gift Wrap

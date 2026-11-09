@@ -12,6 +12,62 @@ import { createRazorpayBrowserCallback } from "@/lib/razorpay-browser-callback";
 import { checkoutIdempotencyDisposition, checkoutRequestFingerprint, isCheckoutIdempotencyKey } from "@/lib/checkout-idempotency";
 import { sendCommittedOrderNotification } from "@/lib/order-notifications";
 import { checkoutAvailabilityConflict, checkoutNeedsPriceConfirmation, checkoutProductStockGuard, checkoutVariantStockGuard, createCheckoutConfirmationToken, CheckoutPriceRaceConflict, CheckoutStockConflict } from "@/lib/checkout-confirmation";
+import { sanitizeDbError } from "@/lib/db-resilience";
+
+function isTransientConnectionError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const err = error as { code?: string; name?: string; message?: string };
+
+  if (err.code === "P1000") return false;
+  if (err.name === "PrismaClientValidationError") return false;
+
+  if (err.code && ["P1001", "P1002", "P1008", "P1017", "P2024"].includes(err.code)) {
+    return true;
+  }
+
+  const msg = (err.message || "").toLowerCase();
+
+  if (
+    msg.includes("password authentication failed") ||
+    msg.includes("authentication failed") ||
+    msg.includes("permission denied") ||
+    msg.includes("unauthorized")
+  ) {
+    return false;
+  }
+
+  const transientPatterns = [
+    "kind: closed",
+    "connection closed",
+    "connectionreset",
+    "econnreset",
+    "etimedout",
+    "socket closed",
+    "can't reach database",
+    "timed out fetching a new connection",
+    "forcibly closed by the remote host",
+    "10054",
+  ];
+
+  return transientPatterns.some((pattern) => msg.includes(pattern));
+}
+
+async function withTransientRetry<T>(queryFn: () => Promise<T>, label: string, delayMs = 1000): Promise<T> {
+  try {
+    return await queryFn();
+  } catch (error) {
+    if (isTransientConnectionError(error)) {
+      console.warn(
+        `[PREHERITAGE Checkout] Transient connection error during ${label}: ${sanitizeDbError(
+          error
+        )}. Retrying once in ${delayMs}ms...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return await queryFn();
+    }
+    throw error;
+  }
+}
 
 const validateCouponForOrder = createCouponValidator(prisma);
 const checkoutRecovery = createCheckoutRecoveryService({ prisma, validateCouponForOrder });
@@ -53,9 +109,12 @@ export async function POST(req: Request) {
         couponCode, giftMessage, orderNotes,
       });
       codAttempt = { key, fingerprint, identity };
-      const existing = await prisma.order.findUnique({ where: { checkoutIdempotencyKey: key }, select: {
-        id: true, orderNumber: true, userId: true, guestEmail: true, checkoutRequestFingerprint: true,
-      } });
+      const existing = await withTransientRetry(
+        () => prisma.order.findUnique({ where: { checkoutIdempotencyKey: key }, select: {
+          id: true, orderNumber: true, userId: true, guestEmail: true, checkoutRequestFingerprint: true,
+        } }),
+        "checkout-find-idempotency"
+      );
       const disposition = checkoutIdempotencyDisposition(existing, identity, fingerprint);
       if (disposition === "replay") return NextResponse.json({ success: true, orderId: existing!.id, orderNumber: existing!.orderNumber, replay: true });
       if (disposition === "conflict") return NextResponse.json({ success: false, message: "This checkout attempt key was already used for different checkout data." }, { status: 409 });
@@ -70,13 +129,19 @@ export async function POST(req: Request) {
     }
 
     if (paymentMethod === "RAZORPAY") {
-      const callback = await finalizeBrowserPayment({ accountUser, customer, orderId: razorpay_order_id, paymentId: razorpay_payment_id, signature: razorpay_signature });
+      const callback = await withTransientRetry(
+        () => finalizeBrowserPayment({ accountUser, customer, orderId: razorpay_order_id, paymentId: razorpay_payment_id, signature: razorpay_signature }),
+        "checkout-finalize-razorpay"
+      );
       return callback instanceof NextResponse ? callback : callback.response;
     }
 
     const normalizedItems = cart.items;
     const ids = Array.from(new Set(normalizedItems.map((item) => item.productId)));
-    const products = await prisma.product.findMany({ where: { id: { in: ids } }, include: { images: { orderBy: { orderIndex: "asc" }, take: 1 }, variants: true } });
+    const products = await withTransientRetry(
+      () => prisma.product.findMany({ where: { id: { in: ids } }, include: { images: { orderBy: { orderIndex: "asc" }, take: 1 }, variants: true } }),
+      "checkout-find-products"
+    );
     const productMap = new Map(products.map((product: any) => [product.id, product]));
 
     let subtotal = 0;
@@ -103,7 +168,10 @@ export async function POST(req: Request) {
       verifiedItems.push({ product, variant, quantity: item.quantity, price });
     }
 
-    const couponResult = await validateCouponForOrder({ code: couponCode, subtotal, email: String(customer.email), userId: accountUser?.id });
+    const couponResult = await withTransientRetry(
+      () => validateCouponForOrder({ code: couponCode, subtotal, email: String(customer.email), userId: accountUser?.id }),
+      "checkout-validate-coupon"
+    );
     if (!couponResult.valid) return NextResponse.json({ success: false, message: couponResult.message }, { status: 400 });
 
     // Fees and discounts are recalculated from current database prices and coupon rules.
@@ -158,7 +226,7 @@ export async function POST(req: Request) {
     }
     const safeOrderNumber = `PRE-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`;
 
-    const order = await prisma.$transaction(async (tx: any) => {
+    const executeOrderTransaction = async (tx: any) => {
       const identityFilter = [
         ...(accountUser?.id ? [{ userId: accountUser.id }] : []),
         ...(String(customer.email).trim() ? [{ guestEmail: String(customer.email).trim().toLowerCase() }] : []),
@@ -253,10 +321,66 @@ export async function POST(req: Request) {
           } } } : { payment: { create: { method: "COD", status: "PENDING", amount: totalAmount, currency: "INR" } } }),
         },
       });
-    }, {
-      maxWait: 15000,
-      timeout: 25000,
-    });
+    };
+
+    let order: any;
+    try {
+      order = await prisma.$transaction(executeOrderTransaction, {
+        maxWait: 15000,
+        timeout: 25000,
+      });
+    } catch (txError: any) {
+      if (isTransientConnectionError(txError)) {
+        console.warn(`[PREHERITAGE Checkout] Transient connection error during order transaction: ${sanitizeDbError(txError)}. Checking outcome before retry...`);
+
+        // Check if the order was already committed despite connection reset
+        if (codAttempt) {
+          try {
+            const committed = await prisma.order.findUnique({
+              where: { checkoutIdempotencyKey: codAttempt.key },
+              select: { id: true, orderNumber: true, userId: true, guestEmail: true, checkoutRequestFingerprint: true },
+            });
+            if (committed) {
+              const disposition = checkoutIdempotencyDisposition(committed, codAttempt.identity, codAttempt.fingerprint);
+              if (disposition === "replay") {
+                return NextResponse.json({ success: true, orderId: committed.id, orderNumber: committed.orderNumber, replay: true });
+              }
+              if (disposition === "conflict") {
+                return NextResponse.json({ success: false, message: "This checkout attempt key was already used for different checkout data." }, { status: 409 });
+              }
+            }
+          } catch (checkErr) {
+            console.warn(`[PREHERITAGE Checkout] Idempotency lookup error: ${sanitizeDbError(checkErr)}`);
+          }
+        }
+
+        // Wait 1000ms for Neon compute to wake up
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Re-check outcome after delay
+        if (codAttempt) {
+          try {
+            const committed = await prisma.order.findUnique({
+              where: { checkoutIdempotencyKey: codAttempt.key },
+              select: { id: true, orderNumber: true },
+            });
+            if (committed) {
+              return NextResponse.json({ success: true, orderId: committed.id, orderNumber: committed.orderNumber, replay: true });
+            }
+          } catch {
+            // Proceed to transaction retry
+          }
+        }
+
+        // Retry the transaction exactly once
+        order = await prisma.$transaction(executeOrderTransaction, {
+          maxWait: 15000,
+          timeout: 25000,
+        });
+      } else {
+        throw txError;
+      }
+    }
 
     if (paymentMethod === "COD") {
       try { await sendCommittedOrderNotification(prisma, order, "PLACED"); } catch { /* Email cannot change a committed order. */ }
