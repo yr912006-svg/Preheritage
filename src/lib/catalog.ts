@@ -3,7 +3,16 @@ import type { ProductItem } from "@/lib/sample-data";
 import { getSellableStock } from "@/lib/inventory";
 
 export const catalogProductInclude = {
-  category: true,
+  category: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+      image: true,
+      orderIndex: true,
+    },
+  },
   subcategory: true,
   collection: true,
   region: true,

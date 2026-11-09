@@ -30,9 +30,24 @@ export default async function ShopPage() {
         orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
         include: catalogProductInclude,
       }),
-      prisma.category.findMany({ orderBy: [{ orderIndex: "asc" }, { name: "asc" }] }),
-      prisma.collection.findMany({ orderBy: { name: "asc" } }),
-      prisma.region.findMany({ orderBy: { name: "asc" } }),
+      prisma.category
+        .findMany({
+          orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+          select: { id: true, name: true, slug: true },
+        })
+        .catch(() => []),
+      prisma.collection
+        .findMany({
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, slug: true },
+        })
+        .catch(() => []),
+      prisma.region
+        .findMany({
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, slug: true, state: true },
+        })
+        .catch(() => []),
     ]);
 
     // Merge categories with master catalog categories so all 8 official collections are filterable

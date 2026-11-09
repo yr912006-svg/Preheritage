@@ -75,46 +75,73 @@ export default async function HomePage() {
     const now = new Date();
 
     const [bannerRecord, productRecords, categoryRecords, regionRecords, philosophyRecord] = await Promise.all([
-      prisma.banner.findFirst({
-        where: {
-          isActive: true,
-          AND: [
-            { OR: [{ startDate: null }, { startDate: { lte: now } }] },
-            { OR: [{ endDate: null }, { endDate: { gte: now } }] },
-          ],
-        },
-        orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
-        select: {
-          id: true,
-          title: true,
-          subtitle: true,
-          imageUrl: true,
-          mobileUrl: true,
-          link: true,
-          tagline: true,
-          position: true,
-        },
-      }),
+      prisma.banner
+        .findFirst({
+          where: {
+            isActive: true,
+            AND: [
+              { OR: [{ startDate: null }, { startDate: { lte: now } }] },
+              { OR: [{ endDate: null }, { endDate: { gte: now } }] },
+            ],
+          },
+          orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
+          select: {
+            id: true,
+            title: true,
+            subtitle: true,
+            imageUrl: true,
+            mobileUrl: true,
+            link: true,
+            tagline: true,
+            position: true,
+          },
+        })
+        .catch(() => null),
       prisma.product.findMany({
         where: { status: "ACTIVE" },
         orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
         take: 8,
         include: catalogProductInclude,
       }),
-      prisma.category.findMany({
-        orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          description: true,
-          image: true,
-          imageAlt: true,
-          focalPoint: true,
-          orderIndex: true,
-          _count: { select: { products: { where: { status: "ACTIVE" } } } },
-        },
-      }),
+      prisma.category
+        .findMany({
+          orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+            image: true,
+            imageAlt: true,
+            focalPoint: true,
+            orderIndex: true,
+            _count: { select: { products: { where: { status: "ACTIVE" } } } },
+          },
+        })
+        .catch(async () => {
+          // Graceful fallback if imageAlt or focalPoint columns are not present in target DB
+          return prisma.category
+            .findMany({
+              orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                description: true,
+                image: true,
+                orderIndex: true,
+                _count: { select: { products: { where: { status: "ACTIVE" } } } },
+              },
+            })
+            .then((cats) =>
+              cats.map((c) => ({
+                ...c,
+                imageAlt: null,
+                focalPoint: null,
+              }))
+            )
+            .catch(() => []);
+        }),
       prisma.region.findMany({
         orderBy: { name: "asc" },
         select: {
