@@ -97,12 +97,19 @@ export default async function HomePage() {
           },
         })
         .catch(() => null),
-      prisma.product.findMany({
-        where: { status: "ACTIVE" },
-        orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
-        take: 8,
-        include: catalogProductInclude,
-      }),
+      prisma.product
+        .findMany({
+          where: { status: "ACTIVE" },
+          orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
+          take: 8,
+          include: catalogProductInclude,
+        })
+        .catch((error) => {
+          console.error(
+            `[PREHERITAGE Database] Homepage product query failed: ${sanitizeDbError(error)}. Returning empty array.`
+          );
+          return [];
+        }),
       prisma.category
         .findMany({
           orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
@@ -112,35 +119,22 @@ export default async function HomePage() {
             slug: true,
             description: true,
             image: true,
-            imageAlt: true,
-            focalPoint: true,
             orderIndex: true,
             _count: { select: { products: { where: { status: "ACTIVE" } } } },
           },
         })
-        .catch(async () => {
-          // Graceful fallback if imageAlt or focalPoint columns are not present in target DB
-          return prisma.category
-            .findMany({
-              orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                description: true,
-                image: true,
-                orderIndex: true,
-                _count: { select: { products: { where: { status: "ACTIVE" } } } },
-              },
-            })
-            .then((cats) =>
-              cats.map((c) => ({
-                ...c,
-                imageAlt: null,
-                focalPoint: null,
-              }))
-            )
-            .catch(() => []);
+        .then((cats) =>
+          cats.map((c) => ({
+            ...c,
+            imageAlt: null,
+            focalPoint: null,
+          }))
+        )
+        .catch((error) => {
+          console.error(
+            `[PREHERITAGE Database] Homepage category query failed: ${sanitizeDbError(error)}. Falling back to static.`
+          );
+          return [];
         }),
       prisma.region.findMany({
         orderBy: { name: "asc" },
@@ -158,12 +152,12 @@ export default async function HomePage() {
     ]);
 
     heroBanner = bannerRecord;
-    products = productRecords.map(toProductItem);
-    categories = mergeStorefrontCategories(categoryRecords, fallbackCategories);
+    products = (productRecords || []).map(toProductItem);
+    categories = mergeStorefrontCategories(categoryRecords || [], fallbackCategories);
     regions = regionRecords && regionRecords.length > 0 ? regionRecords : fallbackRegions;
     philosophy = philosophyRecord;
     categoryCounts = Object.fromEntries(
-      categoryRecords.map((category) => [category.slug, category._count.products])
+      (categoryRecords || []).map((category) => [category.slug, category._count?.products || 0])
     );
     isDatabaseConnected = true;
   } catch (error) {

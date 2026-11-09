@@ -50,7 +50,7 @@ export function toProductItem(product: CatalogProduct): ProductItem {
     slug: product.slug,
     sku: product.sku,
     createdAt: product.createdAt.toISOString(),
-    category: product.category.slug,
+    category: product.category?.slug || "sarees",
     subcategory: product.subcategory?.slug || undefined,
     collection: product.collection?.slug || undefined,
     region: product.region?.slug || "",
