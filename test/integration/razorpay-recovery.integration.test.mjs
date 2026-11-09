@@ -290,8 +290,17 @@ test("two captured checkouts competing for the last stock unit produce one order
     handlerB(signedRequest(`evt-last-stock-b-${b.id}`, capturedBody(b.gateway.order.id, b.gateway.payment.id))),
   ]);
   assert.equal((await prisma.product.findUnique({ where: { id: a.product.id } })).stock, 0);
-  assert.deepEqual(await orderPaymentCounts(a), { orders: 1, payments: 1 });
-  assert.deepEqual(await orderPaymentCounts(b), { orders: 0, payments: 0 });
+  const countsA = await orderPaymentCounts(a);
+  const countsB = await orderPaymentCounts(b);
+  const totalOrders = countsA.orders + countsB.orders;
+  const totalPayments = countsA.payments + countsB.payments;
+  assert.equal(totalOrders, 1, "Exactly one order must be created across both checkouts");
+  assert.equal(totalPayments, 1, "Exactly one payment must be created across both checkouts");
+  assert.ok(
+    (countsA.orders === 1 && countsA.payments === 1 && countsB.orders === 0 && countsB.payments === 0) ||
+    (countsA.orders === 0 && countsA.payments === 0 && countsB.orders === 1 && countsB.payments === 1),
+    "Either checkout A or checkout B must win completely, never a split"
+  );
   const states = await prisma.razorpayCheckout.findMany({ where: { id: { in: [a.intent.id, b.intent.id] } }, select: { status: true } });
   assert.equal(states.filter((row) => row.status === "FINALIZED").length, 1);
   assert.equal(states.filter((row) => row.status === "RECOVERY_REQUIRED").length, 1);
