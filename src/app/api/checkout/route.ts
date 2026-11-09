@@ -149,9 +149,9 @@ export async function POST(req: Request) {
       confirmationToken: body?.confirmedPricingToken,
       current: currentPricing,
       context: confirmationContext,
-      secret: process.env.NEXTAUTH_SECRET ?? "",
+      secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "",
     })) {
-      const confirmationSecret = process.env.NEXTAUTH_SECRET;
+      const confirmationSecret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
       if (!confirmationSecret) return NextResponse.json({ success: false, message: "Checkout cannot verify the updated order total right now. Please try again later." }, { status: 503 });
       const confirmationToken = createCheckoutConfirmationToken({ pricing: currentPricing, context: confirmationContext, secret: confirmationSecret });
       return NextResponse.json({ success: false, code: "PRICE_CHANGED", message: "Prices or order charges changed. Review the updated summary and confirm to continue.", pricing: currentPricing, confirmationToken }, { status: 409 });
