@@ -409,10 +409,10 @@ export async function POST(req: Request) {
           console.error(`[PREHERITAGE Checkout] Idempotency lookup failed: ${sanitizeDbError(checkErr)}`);
         }
 
-        // If the lookup failed during an ambiguous failure, outcome cannot be safely determined
-        if (committedCheckFailed && isAmbiguous) {
+        // If the lookup failed, outcome cannot be safely determined
+        if (committedCheckFailed) {
           console.error(
-            "[PREHERITAGE Checkout] Cannot safely determine transaction outcome after connection reset. Aborting retry to prevent duplicate order."
+            "[PREHERITAGE Checkout] Cannot safely determine transaction outcome. Aborting retry to prevent duplicate order."
           );
           throw new Error("Checkout outcome could not be verified. Please check your order history or try again.");
         }
@@ -534,6 +534,8 @@ export async function POST(req: Request) {
     }
     const message = typeof error?.message === "string" && error.message.startsWith("COUPON_")
       ? "This coupon has already been used or is no longer eligible for this customer."
+      : error?.message === "Checkout outcome could not be verified. Please check your order history or try again."
+      ? error.message
       : "Order could not be saved. Please try again.";
     return NextResponse.json({ success: false, message }, { status: error?.message?.startsWith("COUPON_") ? 409 : 500 });
   }
