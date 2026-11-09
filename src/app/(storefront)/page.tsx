@@ -13,6 +13,81 @@ import { CATEGORIES, REGIONS, ProductItem } from "@/lib/sample-data";
 import { isPrismaConnectionError, sanitizeDbError } from "@/lib/db-resilience";
 import { getHeritagePhilosophy, type HeritagePhilosophyContent } from "@/lib/heritage-philosophy";
 
+/**
+ * Classifies whether a database error is transient (e.g. Neon cold-start suspension,
+ * socket closure, connection reset, connection pool timeout) vs non-transient
+ * (schema mismatch, unique constraint, validation, syntax, or auth errors).
+ */
+function isTransientConnectionError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const err = error as { code?: string; name?: string; message?: string };
+
+  // Explicitly do NOT retry authorization / authentication errors (e.g. P1000, password auth failure)
+  if (err.code === "P1000") return false;
+
+  // Explicitly do NOT retry validation or schema errors
+  if (err.name === "PrismaClientValidationError") return false;
+
+  // Recognized transient Prisma connection and pool timeout error codes:
+  // P1001: Can't reach database server
+  // P1002: The database server was reached but timed out
+  // P1008: Operations timed out
+  // P1017: Server has closed the connection
+  // P2024: Timed out fetching a new connection from the connection pool
+  if (err.code && ["P1001", "P1002", "P1008", "P1017", "P2024"].includes(err.code)) {
+    return true;
+  }
+
+  // Socket, timeout, and OS-level connection drop indicators from Neon cold-start/idle
+  const msg = (err.message || "").toLowerCase();
+
+  // Exclude auth failure messages
+  if (
+    msg.includes("password authentication failed") ||
+    msg.includes("authentication failed") ||
+    msg.includes("permission denied") ||
+    msg.includes("unauthorized")
+  ) {
+    return false;
+  }
+
+  const transientPatterns = [
+    "kind: closed",
+    "connection closed",
+    "connectionreset",
+    "econnreset",
+    "etimedout",
+    "socket closed",
+    "can't reach database",
+    "timed out fetching a new connection",
+    "forcibly closed by the remote host",
+    "10054",
+  ];
+
+  return transientPatterns.some((pattern) => msg.includes(pattern));
+}
+
+/**
+ * Retries a database query exactly once after 1000ms if a transient connection error occurs.
+ * Does NOT retry application, validation, authorization, or schema errors.
+ */
+async function withTransientRetry<T>(queryFn: () => Promise<T>, label: string): Promise<T> {
+  try {
+    return await queryFn();
+  } catch (error) {
+    if (isTransientConnectionError(error)) {
+      console.warn(
+        `[PREHERITAGE Database] Transient connection error during ${label}: ${sanitizeDbError(
+          error
+        )}. Retrying once in 1000ms...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      return await queryFn();
+    }
+    throw error;
+  }
+}
+
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
@@ -75,54 +150,61 @@ export default async function HomePage() {
     const now = new Date();
 
     const [bannerRecord, productRecords, categoryRecords, regionRecords, philosophyRecord] = await Promise.all([
-      prisma.banner
-        .findFirst({
-          where: {
-            isActive: true,
-            AND: [
-              { OR: [{ startDate: null }, { startDate: { lte: now } }] },
-              { OR: [{ endDate: null }, { endDate: { gte: now } }] },
-            ],
-          },
-          orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
-          select: {
-            id: true,
-            title: true,
-            subtitle: true,
-            imageUrl: true,
-            mobileUrl: true,
-            link: true,
-            tagline: true,
-            position: true,
-          },
-        })
-        .catch(() => null),
-      prisma.product
-        .findMany({
-          where: { status: "ACTIVE" },
-          orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
-          take: 8,
-          include: catalogProductInclude,
-        })
-        .catch((error) => {
-          console.error(
-            `[PREHERITAGE Database] Homepage product query failed: ${sanitizeDbError(error)}. Returning empty array.`
-          );
-          return [];
-        }),
-      prisma.category
-        .findMany({
-          orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            description: true,
-            image: true,
-            orderIndex: true,
-            _count: { select: { products: { where: { status: "ACTIVE" } } } },
-          },
-        })
+      withTransientRetry(
+        () =>
+          prisma.banner.findFirst({
+            where: {
+              isActive: true,
+              AND: [
+                { OR: [{ startDate: null }, { startDate: { lte: now } }] },
+                { OR: [{ endDate: null }, { endDate: { gte: now } }] },
+              ],
+            },
+            orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
+            select: {
+              id: true,
+              title: true,
+              subtitle: true,
+              imageUrl: true,
+              mobileUrl: true,
+              link: true,
+              tagline: true,
+              position: true,
+            },
+          }),
+        "Homepage banner query"
+      ).catch(() => null),
+      withTransientRetry(
+        () =>
+          prisma.product.findMany({
+            where: { status: "ACTIVE" },
+            orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
+            take: 8,
+            include: catalogProductInclude,
+          }),
+        "Homepage product query"
+      ).catch((error) => {
+        console.error(
+          `[PREHERITAGE Database] Homepage product query failed: ${sanitizeDbError(error)}. Returning empty array.`
+        );
+        return [];
+      }),
+      withTransientRetry(
+        () =>
+          prisma.category.findMany({
+            orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              description: true,
+              image: true,
+              orderIndex: true,
+              _count: { select: { products: { where: { status: "ACTIVE" } } } },
+            },
+          }),
+        "Homepage category query"
+      )
         .then((cats) =>
           cats.map((c) => ({
             ...c,
@@ -136,18 +218,22 @@ export default async function HomePage() {
           );
           return [];
         }),
-      prisma.region.findMany({
-        orderBy: { name: "asc" },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          state: true,
-          craftForm: true,
-          culturalStory: true,
-          bannerImage: true,
-        },
-      }).catch(() => []),
+      withTransientRetry(
+        () =>
+          prisma.region.findMany({
+            orderBy: { name: "asc" },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              state: true,
+              craftForm: true,
+              culturalStory: true,
+              bannerImage: true,
+            },
+          }),
+        "Homepage region query"
+      ).catch(() => []),
       getHeritagePhilosophy().catch(() => null),
     ]);
 
