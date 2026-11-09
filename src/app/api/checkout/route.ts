@@ -52,6 +52,45 @@ function isTransientConnectionError(error: unknown): boolean {
   return transientPatterns.some((pattern) => msg.includes(pattern));
 }
 
+function isTransactionClosedOrTimeoutError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const err = error as { code?: string; name?: string; message?: string };
+
+  if (err.code !== "P2028") return false;
+
+  const msg = (err.message || "").toLowerCase();
+  const patterns = [
+    "transaction already closed",
+    "unable to start a transaction",
+    "transaction not found",
+    "expired transaction",
+    "transaction timed out",
+    "timed out",
+    "connection closed",
+    "connectionreset",
+    "econnreset",
+    "socket closed",
+    "closed by the remote host",
+  ];
+
+  return patterns.some((p) => msg.includes(p));
+}
+
+function isTransactionWriteConflictError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const err = error as { code?: string; name?: string; message?: string };
+
+  if (err.code === "P2034") return true;
+
+  const msg = (err.message || "").toLowerCase();
+  return (
+    msg.includes("write conflict") ||
+    msg.includes("deadlock detected") ||
+    msg.includes("serialization failure") ||
+    msg.includes("could not serialize access")
+  );
+}
+
 async function withTransientRetry<T>(queryFn: () => Promise<T>, label: string, delayMs = 1000): Promise<T> {
   try {
     return await queryFn();
@@ -330,10 +369,112 @@ export async function POST(req: Request) {
         timeout: 25000,
       });
     } catch (txError: any) {
-      if (isTransientConnectionError(txError)) {
-        console.warn(`[PREHERITAGE Checkout] Transient connection error during order transaction: ${sanitizeDbError(txError)}. Checking outcome before retry...`);
+      const isConnError = isTransientConnectionError(txError);
+      const isTxClosedOrTimeout = isTransactionClosedOrTimeoutError(txError);
+      const isWriteConflict = isTransactionWriteConflictError(txError);
 
-        // Check if the order was already committed despite connection reset
+      if (!isConnError && !isTxClosedOrTimeout && !isWriteConflict) {
+        // Non-transient application/validation/business logic error — never retry
+        throw txError;
+      }
+
+      // Distinguish ambiguous failures (connection/timeout/closed) from explicit write conflicts
+      const isAmbiguous = isConnError || isTxClosedOrTimeout;
+
+      if (isAmbiguous) {
+        console.warn(
+          `[PREHERITAGE Checkout] Ambiguous transaction failure (${
+            isTxClosedOrTimeout ? "P2028 closed/timeout" : "transient connection"
+          }): ${sanitizeDbError(txError)}. Checking outcome before retry...`
+        );
+      } else {
+        console.warn(
+          `[PREHERITAGE Checkout] Transaction write conflict / deadlock (P2034): ${sanitizeDbError(
+            txError
+          )}. Checking outcome before retry...`
+        );
+      }
+
+      // Check if the order was already committed despite failure
+      if (codAttempt) {
+        let committedCheckFailed = false;
+        let committed: any = null;
+        try {
+          committed = await prisma.order.findUnique({
+            where: { checkoutIdempotencyKey: codAttempt.key },
+            select: { id: true, orderNumber: true, userId: true, guestEmail: true, checkoutRequestFingerprint: true },
+          });
+        } catch (checkErr) {
+          committedCheckFailed = true;
+          console.error(`[PREHERITAGE Checkout] Idempotency lookup failed: ${sanitizeDbError(checkErr)}`);
+        }
+
+        // If the lookup failed during an ambiguous failure, outcome cannot be safely determined
+        if (committedCheckFailed && isAmbiguous) {
+          console.error(
+            "[PREHERITAGE Checkout] Cannot safely determine transaction outcome after connection reset. Aborting retry to prevent duplicate order."
+          );
+          throw new Error("Checkout outcome could not be verified. Please check your order history or try again.");
+        }
+
+        if (committed) {
+          const disposition = checkoutIdempotencyDisposition(committed, codAttempt.identity, codAttempt.fingerprint);
+          if (disposition === "replay") {
+            return NextResponse.json({ success: true, orderId: committed.id, orderNumber: committed.orderNumber, replay: true });
+          }
+          if (disposition === "conflict") {
+            return NextResponse.json({ success: false, message: "This checkout attempt key was already used for different checkout data." }, { status: 409 });
+          }
+        }
+      }
+
+      // Wait appropriate backoff: 1000ms for connection recovery, 250ms for write conflict
+      const backoffMs = isAmbiguous ? 1000 : 250;
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+
+      // For ambiguous failures, re-check outcome after backoff
+      if (isAmbiguous && codAttempt) {
+        let secondCheckFailed = false;
+        let committed: any = null;
+        try {
+          committed = await prisma.order.findUnique({
+            where: { checkoutIdempotencyKey: codAttempt.key },
+            select: { id: true, orderNumber: true, userId: true, guestEmail: true, checkoutRequestFingerprint: true },
+          });
+        } catch (checkErr) {
+          secondCheckFailed = true;
+          console.error(`[PREHERITAGE Checkout] Post-backoff idempotency lookup failed: ${sanitizeDbError(checkErr)}`);
+        }
+
+        if (secondCheckFailed) {
+          console.error(
+            "[PREHERITAGE Checkout] Cannot safely determine transaction outcome on post-backoff check. Aborting retry."
+          );
+          throw new Error("Checkout outcome could not be verified. Please check your order history or try again.");
+        }
+
+        if (committed) {
+          const disposition = checkoutIdempotencyDisposition(committed, codAttempt.identity, codAttempt.fingerprint);
+          if (disposition === "replay") {
+            return NextResponse.json({ success: true, orderId: committed.id, orderNumber: committed.orderNumber, replay: true });
+          }
+          if (disposition === "conflict") {
+            return NextResponse.json({ success: false, message: "This checkout attempt key was already used for different checkout data." }, { status: 409 });
+          }
+        }
+      }
+
+      // Safe to retry: retry the transaction exactly once in a protected block
+      try {
+        order = await prisma.$transaction(executeOrderTransaction, {
+          maxWait: 15000,
+          timeout: 25000,
+        });
+      } catch (retryTxError: any) {
+        console.error(
+          `[PREHERITAGE Checkout] Secondary transaction failure during retry: ${sanitizeDbError(retryTxError)}`
+        );
+        // Check outcome once more if connection dropped during commit of retry
         if (codAttempt) {
           try {
             const committed = await prisma.order.findUnique({
@@ -345,40 +486,12 @@ export async function POST(req: Request) {
               if (disposition === "replay") {
                 return NextResponse.json({ success: true, orderId: committed.id, orderNumber: committed.orderNumber, replay: true });
               }
-              if (disposition === "conflict") {
-                return NextResponse.json({ success: false, message: "This checkout attempt key was already used for different checkout data." }, { status: 409 });
-              }
-            }
-          } catch (checkErr) {
-            console.warn(`[PREHERITAGE Checkout] Idempotency lookup error: ${sanitizeDbError(checkErr)}`);
-          }
-        }
-
-        // Wait 1000ms for Neon compute to wake up
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        // Re-check outcome after delay
-        if (codAttempt) {
-          try {
-            const committed = await prisma.order.findUnique({
-              where: { checkoutIdempotencyKey: codAttempt.key },
-              select: { id: true, orderNumber: true },
-            });
-            if (committed) {
-              return NextResponse.json({ success: true, orderId: committed.id, orderNumber: committed.orderNumber, replay: true });
             }
           } catch {
-            // Proceed to transaction retry
+            // Cannot verify; proceed to throw retryTxError
           }
         }
-
-        // Retry the transaction exactly once
-        order = await prisma.$transaction(executeOrderTransaction, {
-          maxWait: 15000,
-          timeout: 25000,
-        });
-      } else {
-        throw txError;
+        throw retryTxError;
       }
     }
 
