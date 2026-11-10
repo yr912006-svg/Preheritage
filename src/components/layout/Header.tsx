@@ -42,40 +42,73 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <>
-      <header
-        ref={headerRef}
-        id="site-header"
-        role="banner"
-        className="sticky top-0 z-50 w-full bg-[#F8F2E7] border-b border-[#E8DFC8] shadow-xs"
-      >
-        <div className="w-full bg-[#F8F2E7] py-3.5 sm:py-4 lg:py-4">
+    <header
+      ref={headerRef}
+      id="site-header"
+      role="banner"
+      className="w-full"
+    >
+      {/* Luxury Announcement Ribbon */}
+      <div className="bg-[#24201D] text-[#F8F2E7] py-2 px-4 text-[10.5px] uppercase tracking-[0.22em] font-sans border-b border-[#B08A45]/20 select-none">
+        <div className="mx-auto flex max-w-[1440px] items-center justify-between">
+          <div className="hidden lg:flex items-center gap-2 text-[#D0C3AE]">
+            <span>INDIAN SOUL</span>
+            <span className="text-[#B08A45]">·</span>
+            <span>GLOBAL LUXURY</span>
+          </div>
+
+          <div className="flex-1 text-center font-medium text-[#F8F2E7]">
+            <span className="hidden sm:inline">Complimentary Pan-India Express Delivery · </span>
+            <span>Handcrafted GI Heritage Weaves</span>
+            <span className="hidden md:inline"> · Worldwide Courier</span>
+          </div>
+
+          <div className="hidden lg:flex items-center gap-4 text-[#D0C3AE]">
+            <Link href="/track-order" className="hover:text-[#B08A45] transition-colors">
+              Track Order
+            </Link>
+            <span aria-hidden="true">·</span>
+            <Link href="/about" className="hover:text-[#B08A45] transition-colors">
+              Artisan Memoir
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Sticky Navbar */}
+      <div className="sticky top-0 z-50 w-full bg-[#F8F2E7] border-b border-[#E8DFC8] shadow-xs">
+        <div className="w-full bg-[#F8F2E7] py-3.5 sm:py-4">
           <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-1 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:gap-x-2">
-              {/* Left: Category menu toggle */}
+            <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:gap-x-4">
+              {/* Left: Mobile Navigation Drawer Toggle */}
               <div className="flex min-w-0 items-center justify-self-start">
                 <button
                   onClick={() => setIsMobileMenuOpen((open) => !open)}
-                  className="inline-flex h-10 w-10 items-center justify-center text-[#24201D] hover:text-[#B08A45] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B08A45]"
+                  className="inline-flex h-11 w-11 items-center justify-center text-[#24201D] hover:text-[#B08A45] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B08A45] rounded-xs"
                   aria-label="Open navigation menu"
                   aria-expanded={isMobileMenuOpen}
                   aria-controls="preheritage-category-menu"
                 >
                   <Menu className="w-6 h-6" />
                 </button>
+                <div className="hidden xl:block ml-3">
+                  <span className="text-[10px] uppercase tracking-[0.24em] font-semibold text-[#756A60]">
+                    Haute Couture &amp; Handlooms
+                  </span>
+                </div>
               </div>
 
               {/* Center: Brand Identity Logo */}
-              <div className="flex justify-center justify-self-center">
+              <div className="flex justify-center justify-self-center py-0.5">
                 <Logo compactOnMobile variant="dark" />
               </div>
 
               {/* Right: Search, Wishlist, Account, Cart */}
-              <div className="flex items-center justify-self-end gap-0.5 sm:gap-2 lg:gap-3">
+              <div className="flex items-center justify-self-end gap-1 sm:gap-2.5 lg:gap-3.5">
                 {/* Search Button */}
                 <button
                   onClick={() => setIsSearchOpen(true)}
-                  className="inline-flex h-10 w-9 sm:w-10 items-center justify-center text-[#24201D] hover:text-[#B08A45] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B08A45]"
+                  className="inline-flex h-11 w-10 sm:w-11 items-center justify-center text-[#24201D] hover:text-[#B08A45] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B08A45] rounded-xs"
                   aria-label="Search store"
                 >
                   <Search className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -84,12 +117,12 @@ export const Header: React.FC = () => {
                 {/* Wishlist */}
                 <Link
                   href="/account/wishlist"
-                  className="relative inline-flex h-10 w-9 sm:w-10 items-center justify-center text-[#24201D] hover:text-[#B08A45] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B08A45]"
+                  className="relative inline-flex h-11 w-10 sm:w-11 items-center justify-center text-[#24201D] hover:text-[#B08A45] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B08A45] rounded-xs"
                   aria-label="View wishlist"
                 >
                   <Heart className="w-4 h-4 sm:w-5 sm:h-5" />
                   {wishlist.length > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-burgundy text-white rounded-full text-[10px] font-bold flex items-center justify-center">
+                    <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-[#881337] text-white rounded-full text-[10px] font-bold flex items-center justify-center shadow-xs">
                       {wishlist.length}
                     </span>
                   )}
@@ -98,7 +131,7 @@ export const Header: React.FC = () => {
                 {/* Account */}
                 <Link
                   href="/account"
-                  className="inline-flex h-10 w-9 sm:w-10 items-center justify-center text-[#24201D] hover:text-[#B08A45] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B08A45]"
+                  className="inline-flex h-11 w-10 sm:w-11 items-center justify-center text-[#24201D] hover:text-[#B08A45] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B08A45] rounded-xs"
                   aria-label="Account profile"
                 >
                   <User className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -107,12 +140,12 @@ export const Header: React.FC = () => {
                 {/* Cart Drawer Trigger */}
                 <button
                   onClick={() => setIsCartOpen(true)}
-                  className="relative inline-flex h-10 w-9 sm:w-10 items-center justify-center text-[#24201D] hover:text-[#B08A45] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B08A45]"
+                  className="relative inline-flex h-11 w-10 sm:w-11 items-center justify-center text-[#24201D] hover:text-[#B08A45] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B08A45] rounded-xs"
                   aria-label="Shopping bag"
                 >
                   <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
                   {totalItemsCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-gold-600 text-white rounded-full text-[10px] font-bold flex items-center justify-center">
+                    <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-[#B08A45] text-white rounded-full text-[10px] font-bold flex items-center justify-center shadow-xs">
                       {totalItemsCount}
                     </span>
                   )}
@@ -123,33 +156,33 @@ export const Header: React.FC = () => {
             {/* Desktop Editorial Navigation Links */}
             <nav
               aria-label="Main navigation"
-              className="hidden items-center justify-center gap-8 pt-3 text-[11px] uppercase tracking-[0.24em] font-medium text-[#24201D] lg:flex"
+              className="hidden items-center justify-center gap-7 lg:gap-9 xl:gap-11 pt-3.5 pb-0.5 text-[11px] uppercase tracking-[0.24em] font-medium text-[#24201D] lg:flex border-t border-[#E8DFC8]/60 mt-3"
             >
-              <Link href="/shop" className="editorial-nav-link text-[#24201D] hover:text-[#B08A45] transition-colors">
+              <Link href="/shop" className="relative py-1 hover:text-[#B08A45] transition-colors after:absolute after:bottom-0 after:left-0 after:h-[1.5px] after:w-0 hover:after:w-full after:bg-[#B08A45] after:transition-all after:duration-300">
                 Shop All
               </Link>
-              <Link href="/shop?category=sarees" className="editorial-nav-link text-[#24201D] hover:text-[#B08A45] transition-colors">
+              <Link href="/shop?category=sarees" className="relative py-1 hover:text-[#B08A45] transition-colors after:absolute after:bottom-0 after:left-0 after:h-[1.5px] after:w-0 hover:after:w-full after:bg-[#B08A45] after:transition-all after:duration-300">
                 Sarees
               </Link>
-              <Link href="/shop?category=kurtas" className="editorial-nav-link text-[#24201D] hover:text-[#B08A45] transition-colors">
+              <Link href="/shop?category=kurtas" className="relative py-1 hover:text-[#B08A45] transition-colors after:absolute after:bottom-0 after:left-0 after:h-[1.5px] after:w-0 hover:after:w-full after:bg-[#B08A45] after:transition-all after:duration-300">
                 Kurtas
               </Link>
-              <Link href="/collections/mens-ethnic-wear" className="editorial-nav-link text-[#24201D] hover:text-[#B08A45] transition-colors">
+              <Link href="/collections/mens-ethnic-wear" className="relative py-1 hover:text-[#B08A45] transition-colors after:absolute after:bottom-0 after:left-0 after:h-[1.5px] after:w-0 hover:after:w-full after:bg-[#B08A45] after:transition-all after:duration-300">
                 Men&apos;s Wear
               </Link>
-              <Link href="/shop?badge=BESTSELLER" className="editorial-nav-link text-[#24201D] hover:text-[#B08A45] transition-colors">
+              <Link href="/shop?badge=BESTSELLER" className="relative py-1 hover:text-[#B08A45] transition-colors after:absolute after:bottom-0 after:left-0 after:h-[1.5px] after:w-0 hover:after:w-full after:bg-[#B08A45] after:transition-all after:duration-300">
                 Bestsellers
               </Link>
-              <Link href="/journal" className="editorial-nav-link text-[#24201D] hover:text-[#B08A45] transition-colors">
+              <Link href="/journal" className="relative py-1 hover:text-[#B08A45] transition-colors after:absolute after:bottom-0 after:left-0 after:h-[1.5px] after:w-0 hover:after:w-full after:bg-[#B08A45] after:transition-all after:duration-300">
                 Journal
               </Link>
-              <Link href="/about" className="editorial-nav-link text-[#24201D] hover:text-[#B08A45] transition-colors">
+              <Link href="/about" className="relative py-1 hover:text-[#B08A45] transition-colors after:absolute after:bottom-0 after:left-0 after:h-[1.5px] after:w-0 hover:after:w-full after:bg-[#B08A45] after:transition-all after:duration-300">
                 Our Memoir
               </Link>
             </nav>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Live Search Modal */}
       {isSearchOpen && (
@@ -250,67 +283,85 @@ export const Header: React.FC = () => {
                 <Link
                   href="/shop"
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="block py-2 border-b border-ivory-300 font-serif text-base text-[#24201D] hover:text-[#B08A45]"
+                  className="flex items-center justify-between min-h-[44px] py-2 border-b border-[#E8DFC8] font-serif text-lg text-[#24201D] hover:text-[#B08A45]"
                 >
-                  All Collections
+                  <span>All Curated Collections</span>
+                  <span className="text-xs font-sans text-[#B08A45] uppercase tracking-widest">Explore →</span>
                 </Link>
-                {CATEGORIES.map((cat) => (
-                  <Link
-                    key={cat.id}
-                    href={`/shop?category=${cat.slug}`}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="block py-1 text-[#24201D]/80 hover:text-[#B08A45] transition-colors"
-                  >
-                    {cat.name}
-                  </Link>
-                ))}
 
-                <div className="pt-4 border-t border-ivory-300">
-                  <div className="text-[11px] uppercase tracking-widest text-[#B08A45] font-bold mb-2">
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-[0.24em] text-[#B08A45] font-bold py-1">
+                    Couture Categories
+                  </div>
+                  {CATEGORIES.map((cat) => (
+                    <Link
+                      key={cat.id}
+                      href={cat.slug === "mens-ethnic-wear" ? "/collections/mens-ethnic-wear" : `/shop?category=${cat.slug}`}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="flex items-center min-h-[40px] py-1.5 text-[#24201D]/85 hover:text-[#B08A45] transition-colors"
+                    >
+                      {cat.name}
+                    </Link>
+                  ))}
+                  <Link
+                    href="/shop?badge=BESTSELLER"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center min-h-[40px] py-1.5 text-[#B08A45] font-semibold hover:text-[#24201D] transition-colors"
+                  >
+                    ★ Bestsellers &amp; Patron Favorites
+                  </Link>
+                </div>
+
+                <div className="pt-4 border-t border-[#E8DFC8]">
+                  <div className="text-[10px] uppercase tracking-[0.24em] text-[#B08A45] font-bold mb-2">
                     Shop by Cultural Region
                   </div>
-                  <div className="space-y-1.5 pl-2">
+                  <div className="space-y-1 pl-1">
                     {REGIONS.map((r) => (
                       <Link
                         key={r.id}
                         href={`/shop?region=${r.slug}`}
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className="block text-xs text-[#24201D]/70 hover:text-[#B08A45] py-1"
+                        className="flex items-center justify-between min-h-[36px] text-xs text-[#24201D]/75 hover:text-[#B08A45] py-1"
                       >
-                        {r.name} ({r.craft})
+                        <span className="font-medium">{r.name}</span>
+                        <span className="text-[10.5px] text-[#756A60] font-light italic">{r.craft}</span>
                       </Link>
                     ))}
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-ivory-300 space-y-2 text-xs">
+                <div className="pt-4 border-t border-[#E8DFC8] space-y-1 text-xs">
+                  <div className="text-[10px] uppercase tracking-[0.24em] text-[#B08A45] font-bold mb-1">
+                    The Maison
+                  </div>
+                  <Link
+                    href="/about"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center min-h-[38px] text-[#24201D]/80 hover:text-[#B08A45]"
+                  >
+                    The Artisan Memoir &amp; Story
+                  </Link>
                   <Link
                     href="/journal"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="block text-[#24201D]/70 hover:text-[#B08A45]"
+                    className="flex items-center min-h-[38px] text-[#24201D]/80 hover:text-[#B08A45]"
                   >
                     Cultural Journal
                   </Link>
                   <Link
-                    href="/about"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="block text-[#24201D]/70 hover:text-[#B08A45]"
-                  >
-                    The Preheritage Story
-                  </Link>
-                  <Link
                     href="/track-order"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="block text-[#24201D]/70 hover:text-[#B08A45]"
+                    className="flex items-center min-h-[38px] text-[#24201D]/80 hover:text-[#B08A45]"
                   >
                     Track My Order
                   </Link>
                   <Link
                     href="/account/wishlist"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="block text-[#24201D]/70 hover:text-[#B08A45]"
+                    className="flex items-center min-h-[38px] text-[#24201D]/80 hover:text-[#B08A45]"
                   >
-                    Wishlist
+                    My Wishlist
                   </Link>
                 </div>
               </div>
@@ -329,7 +380,7 @@ export const Header: React.FC = () => {
           </div>
         </div>
       )}
-    </>
+    </header>
   );
 };
 

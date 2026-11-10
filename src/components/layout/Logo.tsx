@@ -51,7 +51,7 @@ export const Logo: React.FC<LogoProps> = ({
         </svg>
 
         <span
-          className={`${compactOnMobile ? "tracking-[0.12em] text-base sm:tracking-[0.28em] sm:text-2xl" : "tracking-[0.28em] text-xl sm:text-2xl"} font-serif font-bold uppercase transition-colors ${
+          className={`${compactOnMobile ? "tracking-[0.16em] text-lg sm:tracking-[0.28em] sm:text-2xl" : "tracking-[0.28em] text-xl sm:text-2xl"} font-serif font-bold uppercase transition-colors ${
             isLight ? "text-[#F8F2E7] group-hover:text-[#B08A45]" : "text-[#24201D] group-hover:text-[#B08A45]"
           }`}
         >
@@ -61,7 +61,7 @@ export const Logo: React.FC<LogoProps> = ({
 
       {showTagline && (
         <span
-          className={`${compactOnMobile ? "text-[9.5px] tracking-[0.16em] sm:text-[10.5px] sm:tracking-[0.25em]" : "text-[10px] sm:text-[11px] tracking-[0.25em]"} uppercase font-sans mt-0.5 font-medium ${
+          className={`${compactOnMobile ? "text-[9px] tracking-[0.18em] sm:text-[10px] sm:tracking-[0.26em]" : "text-[10px] sm:text-[10.5px] tracking-[0.26em]"} uppercase font-sans mt-0.5 font-medium ${
             isLight ? "text-[#D0C3AE] group-hover:text-[#F8F2E7]" : "text-[#756A60] group-hover:text-[#24201D]"
           }`}
         >

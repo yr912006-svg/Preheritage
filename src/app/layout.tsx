@@ -85,9 +85,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${cormorant.variable} ${plusJakarta.variable}`}>
-      <body className="min-h-screen flex flex-col bg-ivory text-charcoal-900 selection:bg-gold-200 selection:text-charcoal-950 font-sans">
-        {children}
-      </body>
+      <body className="min-h-screen flex flex-col bg-ivory text-charcoal-900 selection:bg-gold-200 selection:text-charcoal-950 font-sans">{children}</body>
     </html>
   );
 }
