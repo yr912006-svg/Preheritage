@@ -87,21 +87,64 @@ export default function ProductEditor({ productId }: { productId?: string }) {
   const uploadImages = async (fileList: FileList | null) => {
     if (!fileList?.length) return;
     const files = Array.from(fileList);
-    if (files.some((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type) || !file.size || file.size > 10 * 1024 * 1024)) { setError("Choose JPEG, PNG, or WebP images smaller than 10 MB each."); return; }
-    setError(""); setUploading(true);
+    if (files.some((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type) || !file.size || file.size > 10 * 1024 * 1024)) {
+      setError("Choose JPEG, PNG, or WebP images smaller than 10 MB each.");
+      return;
+    }
+    setError("");
+    setUploading(true);
     const begin = images.length;
     setImages((current) => [...current, ...files.map(() => ({ url: "", altText: "", status: "uploading" as const }))]);
+
     try {
-      const form = new FormData(); files.forEach((file) => form.append("files", file));
-      const response = await fetch("/api/storage/upload", { method: "POST", body: form });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Image upload failed.");
-      setImages((current) => { const next = [...current]; result.uploads.forEach((item: { url: string }, index: number) => { next[begin + index] = { url: item.url, altText: "", status: "uploaded" }; }); return next; });
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const presignRes = await fetch("/api/storage/presign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }),
+        });
+
+        let presignData: any = null;
+        const contentType = presignRes.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          try {
+            presignData = await presignRes.json();
+          } catch {
+            presignData = null;
+          }
+        }
+
+        if (!presignRes.ok) {
+          if (presignRes.status === 413) throw new Error("Image file is too large (maximum 10 MB).");
+          throw new Error(presignData?.error || presignData?.message || `Upload authorization failed (${presignRes.status}).`);
+        }
+
+        const { uploadUrl, url } = presignData;
+        const uploadRes = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+
+        if (!uploadRes.ok) {
+          if (uploadRes.status === 413) throw new Error("Image file is too large (maximum 10 MB).");
+          throw new Error(`Direct storage upload failed (${uploadRes.status} ${uploadRes.statusText}).`);
+        }
+
+        setImages((current) => {
+          const next = [...current];
+          next[begin + i] = { url, altText: "", status: "uploaded" };
+          return next;
+        });
+      }
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Image upload failed.";
-      setImages((current) => current.map((image, index) => index >= begin && index < begin + files.length ? { ...image, status: "failed", error: message } : image));
+      setImages((current) => current.map((image, index) => index >= begin && index < begin + files.length && image.status === "uploading" ? { ...image, status: "failed", error: message } : image));
       setError(message);
-    } finally { setUploading(false); }
+    } finally {
+      setUploading(false);
+    }
   };
 
   const moveImage = (index: number, delta: number) => setImages((current) => {
@@ -117,8 +160,15 @@ export default function ProductEditor({ productId }: { productId?: string }) {
       const readyPrimaryIndex = Math.max(0, images.slice(0, primaryIndex).filter((image) => image.status === "uploaded").length);
       const payload = { ...draft, productId, stock: variants.length ? 0 : draft.stock, costPrice: draft.costPrice === "" ? null : draft.costPrice, images: readyImages.map(({ url, altText }) => ({ url, altText })), primaryImageIndex: readyPrimaryIndex, variants };
       const response = await fetch("/api/admin/products", { method: productId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message || "Product could not be saved.");
+      let result: any = null;
+      if (response.headers.get("content-type")?.includes("application/json")) {
+        try {
+          result = await response.json();
+        } catch {
+          result = null;
+        }
+      }
+      if (!response.ok) throw new Error(result?.message || result?.error || `Product could not be saved (${response.status}).`);
       window.location.href = "/admin/products";
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Product could not be saved."); }
     finally { setSaving(false); }

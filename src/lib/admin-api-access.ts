@@ -41,6 +41,14 @@ export const ADMIN_API_CAPABILITIES = {
     path: "/api/storage/upload",
     methods: { POST: "product-images.upload" },
   },
+  productImagePresign: {
+    path: "/api/storage/presign",
+    methods: { POST: "product-images.upload" },
+  },
+  reviews: {
+    path: "/api/admin/reviews",
+    methods: { GET: "reviews.moderate", PATCH: "reviews.moderate" },
+  },
 } as const satisfies Record<string, { path: string; methods: Record<string, AdminCapability> }>;
 
 export type AdminCapabilityAuthorizer = (capability: AdminCapability) => Promise<{
