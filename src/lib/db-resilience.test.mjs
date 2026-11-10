@@ -37,4 +37,3 @@ test("sanitizeDbError redacts database credentials and passwords", () => {
   assert.equal(sanitizedParam.includes("supersecretpass"), false);
   assert.equal(sanitizedParam.includes("password=***"), true);
 });
-

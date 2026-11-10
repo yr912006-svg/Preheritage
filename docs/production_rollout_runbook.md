@@ -23,7 +23,7 @@ Ensure the following environment variables are present in the target environment
 | Variable Name | Purpose | Notes |
 | :--- | :--- | :--- |
 | `DATABASE_URL` | Pooled connection string | Points to Neon PgBouncer pooler (`?sslmode=require&pgbouncer=true`). |
-| `DIRECT_URL` | Unpooled connection string | Direct Neon endpoint without PgBouncer; required for Prisma migrations and advisory locks. |
+| `DATABASE_URL_UNPOOLED` | Unpooled connection string | Direct Neon endpoint without PgBouncer; required for Prisma migrations and advisory locks. |
 | `RAZORPAY_KEY_ID` | Razorpay Gateway Key ID | Must match the environment mode (TEST for development, LIVE for production). |
 | `RAZORPAY_KEY_SECRET` | Razorpay Gateway Secret | Server-side signature validation and API calls. |
 | `RAZORPAY_WEBHOOK_SECRET` | Webhook signature HMAC secret | Configured in Razorpay Webhooks dashboard. |
@@ -94,7 +94,7 @@ npx prisma migrate status
 ## 5. Rollout Procedure: Development First, Then Production
 
 ### Phase A: Development Deployment
-1. Connect unpooled `DIRECT_URL` to development database (`ep-dark-pine-b565nrk4`).
+1. Connect unpooled `DATABASE_URL_UNPOOLED` to development database (`ep-dark-pine-b565nrk4`).
 2. Run `npx prisma migrate resolve --applied 0_init`.
 3. Run `npx prisma migrate deploy`.
 4. Deploy branch `codex/preheritage-ecommerce-fixes` to the Vercel Development/Preview environment.
@@ -105,7 +105,7 @@ npx prisma migrate status
 
 ### Phase B: Production Deployment
 1. Verify the Neon production backup branch `prod-backup-pre-migration` (`br-purple-king-b5xag9bf`, LSN: `0/25F8568`).
-2. Connect unpooled `DIRECT_URL` to production database (`ep-wild-hat-b5yend0s`).
+2. Connect unpooled `DATABASE_URL_UNPOOLED` to production database (`ep-wild-hat-b5yend0s`).
 3. Run `npx prisma migrate resolve --applied 0_init`.
 4. Run `npx prisma migrate deploy` (applies `20261109120000`, `20261109130000`, and `20261109140000`).
 5. Merge `codex/preheritage-ecommerce-fixes` into `main` and trigger production Vercel deployment.

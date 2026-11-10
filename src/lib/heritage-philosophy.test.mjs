@@ -24,4 +24,3 @@ test("DEFAULT_HERITAGE_PHILOSOPHY provides all required section fields", () => {
   assert.equal(DEFAULT_HERITAGE_PHILOSOPHY.cardTitle, "Sacred Craft Lineage");
   assert.equal(DEFAULT_HERITAGE_PHILOSOPHY.memoirLinkUrl, "/about");
 });
-

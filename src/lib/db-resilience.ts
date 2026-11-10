@@ -48,4 +48,3 @@ export function sanitizeDbError(error: unknown): string {
     .replace(/password=[^\s;&]+/gi, "password=***")
     .replace(/user=[^\s;&]+/gi, "user=***");
 }
-

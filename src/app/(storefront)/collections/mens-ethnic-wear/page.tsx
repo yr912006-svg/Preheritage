@@ -323,4 +323,3 @@ export default async function MensEthnicWearCollectionPage() {
     </main>
   );
 }
-

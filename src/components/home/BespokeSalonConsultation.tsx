@@ -70,4 +70,3 @@ export const BespokeSalonConsultation: React.FC = () => {
 };
 
 export default BespokeSalonConsultation;
-

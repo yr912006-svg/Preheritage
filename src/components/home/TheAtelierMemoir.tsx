@@ -95,7 +95,7 @@ export const TheAtelierMemoir: React.FC = () => {
                     Purity of Traditional Weft
                   </h4>
                   <p className="text-xs sm:text-sm text-stone-300 font-light leading-relaxed mt-1">
-                    Authentic wooden pit-loom craftsmanship, hand-guided tension, and coordinated antique gold-tone zari motifs inspired by Varanasi's historic design archives.
+                    Authentic wooden pit-loom craftsmanship, hand-guided tension, and coordinated antique gold-tone zari motifs inspired by Varanasi&apos;s historic design archives.
                   </p>
                 </div>
               </div>
@@ -118,4 +118,3 @@ export const TheAtelierMemoir: React.FC = () => {
 };
 
 export default TheAtelierMemoir;
-

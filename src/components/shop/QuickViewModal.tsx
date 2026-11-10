@@ -407,4 +407,3 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, isOpen,
 };
 
 export default QuickViewModal;
-

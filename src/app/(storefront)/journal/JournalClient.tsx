@@ -141,7 +141,7 @@ export default function JournalClient({ articles }: JournalClientProps) {
             {/* Pull Quote */}
             <div className="my-8 rounded-xs border-l-2 border-gold-500 bg-ivory-100/70 p-5 italic text-charcoal-800">
               <p className="font-serif text-base leading-relaxed sm:text-lg">
-                "{selectedArticle.quote.text}"
+                &ldquo;{selectedArticle.quote.text}&rdquo;
               </p>
               <footer className="mt-3 text-xs font-sans not-italic font-semibold tracking-wide text-charcoal-600">
                 — {selectedArticle.quote.author}
@@ -182,4 +182,3 @@ export default function JournalClient({ articles }: JournalClientProps) {
     </>
   );
 }
-

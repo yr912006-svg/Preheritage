@@ -214,4 +214,3 @@ test.describe("safe storefront interactions", () => {
     await expect(page.getByText("Added to bag", { exact: true })).toBeVisible();
   });
 });
-

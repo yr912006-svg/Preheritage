@@ -135,4 +135,3 @@ export const TheJournalEditorial: React.FC = () => {
 };
 
 export default TheJournalEditorial;
-

@@ -12,4 +12,3 @@ export function getSiteUrl(): string {
   }
   return "https://preheritage.com";
 }
-
