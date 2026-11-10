@@ -18,7 +18,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Please provide complete and valid delivery details." }, { status: 400 });
     }
     if (!isRazorpayServerConfigured()) {
-      return NextResponse.json({ success: false, message: "Payment gateway is not configured. Please contact the store." }, { status: 503 });
+      return NextResponse.json({
+        success: false,
+        message: "Razorpay payment gateway is not configured. Missing required environment variables: RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.",
+      }, { status: 503 });
     }
 
     const ids = Array.from(new Set(cart.items.map((i) => i.productId)));
@@ -64,7 +67,17 @@ export async function POST(req: Request) {
       currency: "INR",
       snapshot: {
         customer: safeCustomer,
-        items: cart.items.map((item) => ({ productId: item.productId, variantId: item.variantId ?? null, quantity: item.quantity })),
+        items: cart.items.map((item) => {
+          const rawItem = Array.isArray(items)
+            ? items.find((entry: any) => (entry?.productId === item.productId || entry?.id === item.productId) && (entry?.variantId || null) === (item.variantId || null))
+            : null;
+          return {
+            productId: item.productId,
+            variantId: item.variantId ?? null,
+            quantity: item.quantity,
+            image: typeof rawItem?.image === "string" ? rawItem.image : null,
+          };
+        }),
         userId: accountUser?.id ?? null,
         couponCode: couponResult.coupon?.code ?? null,
         deliveryMethod,
@@ -83,7 +96,11 @@ export async function POST(req: Request) {
 
     await prisma.razorpayCheckout.update({ where: { id: intent.id }, data: { razorpayOrderId: result.order.id } });
 
-    return NextResponse.json({ ...result, checkoutIntentId: intent.id });
+    return NextResponse.json({
+      ...result,
+      keyId: process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+      checkoutIntentId: intent.id,
+    });
   } catch (error: any) {
     console.error("Razorpay order API error:", error);
     return NextResponse.json({ message: error.message || "Failed to create payment" }, { status: 500 });

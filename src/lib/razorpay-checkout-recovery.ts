@@ -122,7 +122,9 @@ async function finalizeCapturedCheckout(intentId: string, gatewayOrder: any, gat
       const price = Number(product.price) + Number(variant?.additionalPrice ?? 0);
       if (!Number.isFinite(price) || price <= 0) throw new CheckoutRecoveryError("A product price could not be verified.", "PRICE_INVALID");
       subtotal += price * line.quantity;
-      verifiedItems.push({ product, variant, quantity: line.quantity, price });
+      const snapshotItem = snapshot.items.find((item: any) => item.productId === line.productId && (item.variantId || null) === (line.variantId || null)) as any;
+      const requestedImage = typeof snapshotItem?.image === "string" && snapshotItem.image.trim() ? snapshotItem.image.trim() : null;
+      verifiedItems.push({ product, variant, quantity: line.quantity, price, image: requestedImage ?? product.images?.[0]?.url ?? null });
     }
     const coupon = await validateCouponForOrder({ code: snapshot.couponCode, subtotal, email: intent.customerEmail, userId: intent.userId });
     if (!coupon.valid) throw new CheckoutRecoveryError(coupon.message, "COUPON_INELIGIBLE");
@@ -200,7 +202,7 @@ async function finalizeCapturedCheckout(intentId: string, gatewayOrder: any, gat
         items: { create: verifiedItems.map((line) => ({ productId: line.product.id, variantId: line.variant?.id ?? null,
           title: line.product.title, sku: line.variant?.sku ?? line.product.sku, size: line.variant?.size ?? null,
           color: line.variant?.color ?? null, price: line.price, quantity: line.quantity, totalPrice: line.price * line.quantity,
-          image: line.product.images?.[0]?.url ?? null })) },
+          image: line.image ?? line.product.images?.[0]?.url ?? null })) },
         timeline: { create: { status: "PLACED", title: "Order Placed", description: "Order placed with PREHERITAGE." } },
         payment: { create: { method: "RAZORPAY", status: "SUCCESS", amount: totalAmount, currency: "INR",
           razorpayOrderId: intent.razorpayOrderId, razorpayPaymentId: gatewayPayment.id, paidAt: now() } },

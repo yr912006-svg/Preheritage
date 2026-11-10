@@ -12,6 +12,7 @@ import {
   normalizeCartItems,
   removeCartItem,
   setCartItemQuantity,
+  updateCartItemImage as updateCartItemImageModel,
   type CartItem,
 } from "@/lib/cart-model";
 
@@ -20,9 +21,10 @@ type AppliedCartCoupon = { code: string; discountAmount: number; freeShipping: b
 interface CartContextType {
   cart: CartItem[];
   savedForLater: CartItem[];
-  addToCart: (product: ProductItem, size?: string, color?: string, quantity?: number) => { success: boolean; message?: string };
+  addToCart: (product: ProductItem, size?: string, color?: string, quantity?: number, image?: string) => { success: boolean; message?: string };
   removeFromCart: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
+  updateCartItemImage: (itemId: string, image: string) => void;
   saveForLater: (itemId: string) => void;
   moveToCart: (itemId: string) => void;
   clearCart: () => void;
@@ -175,9 +177,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     product: ProductItem,
     size?: string,
     color?: string,
-    quantity = 1
+    quantity = 1,
+    image?: string
   ) => {
-    const created = createCartItem(product, size, color, quantity);
+    const created = createCartItem(product, size, color, quantity, image);
     if (!created.item) return { success: false, message: created.message || "This item could not be added." };
     const existing = normalizeCartItems(cart).find((item) => item.id === created.item?.id);
     const acceptedQuantity = Math.min(created.item.quantity, created.item.maxStock - (existing?.quantity || 0));
@@ -196,6 +199,19 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (accountCart) syncAccountCart({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: item.productId, variantId: item.variantId, quantity: acceptedQuantity }) });
     setIsCartOpen(true);
     return { success: true };
+  };
+
+  const updateCartItemImage = (itemId: string, image: string) => {
+    if (!image) return;
+    setCart((previous) => {
+      const nextCart = updateCartItemImageModel(previous, itemId, image);
+      try {
+        if (!accountCart) {
+          localStorage.setItem("preheritage_cart", JSON.stringify(nextCart));
+        }
+      } catch { /* storage fallback */ }
+      return nextCart;
+    });
   };
 
   const removeFromCart = (itemId: string) => {
@@ -318,6 +334,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addToCart,
         removeFromCart,
         updateQuantity,
+        updateCartItemImage,
         saveForLater,
         moveToCart,
         clearCart,

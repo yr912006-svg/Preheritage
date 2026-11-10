@@ -142,6 +142,12 @@ export default function CheckoutPage() {
   const [orderNotes, setOrderNotes] = useState("");
 
   const [razorpayEnabled, setRazorpayEnabled] = useState(false);
+  const [paymentConfig, setPaymentConfig] = useState<{
+    razorpayEnabled: boolean;
+    keyId: string | null;
+    missingConfig: string[];
+    loading: boolean;
+  }>({ razorpayEnabled: false, keyId: null, missingConfig: [], loading: true });
   const [paymentMethod, setPaymentMethod] = useState<"RAZORPAY" | "COD">("COD");
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -159,10 +165,34 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/payments/config", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((config) => {
-      if (active) setRazorpayEnabled(config?.razorpayEnabled === true);
-    }).catch(() => { if (active) setRazorpayEnabled(false); });
-    return () => { active = false; };
+    void fetch("/api/payments/config", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((config) => {
+        if (!active || !config) return;
+        const isEnabled = config.razorpayEnabled === true;
+        setRazorpayEnabled(isEnabled);
+        setPaymentConfig({
+          razorpayEnabled: isEnabled,
+          keyId: config.keyId || null,
+          missingConfig: Array.isArray(config.missingConfig) ? config.missingConfig : [],
+          loading: false,
+        });
+        if (isEnabled) {
+          setPaymentMethod("RAZORPAY");
+        } else {
+          setPaymentMethod("COD");
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setRazorpayEnabled(false);
+          setPaymentConfig({ razorpayEnabled: false, keyId: null, missingConfig: ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET"], loading: false });
+          setPaymentMethod("COD");
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Pincode validation state
@@ -288,6 +318,9 @@ export default function CheckoutPage() {
 
       // 2. Razorpay Payment Flow
       if (paymentMethod === "RAZORPAY") {
+        if (!paymentConfig.razorpayEnabled) {
+          throw new Error("Razorpay online payments require RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to be configured in environment variables. Please choose Cash on Delivery.");
+        }
         const scriptLoaded = await loadRazorpayScript();
         if (!scriptLoaded) {
           throw new Error("Could not load Razorpay payment gateway. Please check your internet connection.");
@@ -298,14 +331,19 @@ export default function CheckoutPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-                    items: cart.map((item: any) => ({ productId: item.productId || item.id, variantId: item.variantId, quantity: item.quantity })),
-                    deliveryMethod,
-                    giftWrap: isGiftWrapped,
-                    couponCode: appliedCoupon?.code,
-                    customerEmail: formData.email,
-                    customer: formData,
-                    giftMessage,
-                    orderNotes,
+            items: cart.map((item: any) => ({
+              productId: item.productId || item.id,
+              variantId: item.variantId,
+              quantity: item.quantity,
+              image: item.image,
+            })),
+            deliveryMethod,
+            giftWrap: isGiftWrapped,
+            couponCode: appliedCoupon?.code,
+            customerEmail: formData.email,
+            customer: formData,
+            giftMessage,
+            orderNotes,
           }),
         });
 
@@ -315,9 +353,9 @@ export default function CheckoutPage() {
         }
 
         const rzpOrderId = orderData.order.id;
-        const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+        const keyId = orderData.keyId || paymentConfig.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
         if (!keyId) {
-          throw new Error("Payment gateway is not configured. Please contact the store.");
+          throw new Error("Razorpay key ID is missing. Please configure RAZORPAY_KEY_ID in environment variables.");
         }
 
         const options = {
@@ -348,9 +386,25 @@ export default function CheckoutPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  orderNumber: confirmedOrderNumber, customer: formData, items: cart, subtotal,
-                  discountAmount, couponCode: appliedCoupon?.code, shippingFee, giftWrapFee, codFee: 0,
-                  grandTotal, paymentMethod: "RAZORPAY", deliveryMethod, giftMessage, orderNotes,
+                  orderNumber: confirmedOrderNumber,
+                  customer: formData,
+                  items: cart.map((item: any) => ({
+                    productId: item.productId || item.id,
+                    variantId: item.variantId,
+                    quantity: item.quantity,
+                    image: item.image,
+                  })),
+                  subtotal,
+                  discountAmount,
+                  couponCode: appliedCoupon?.code,
+                  shippingFee,
+                  giftWrapFee,
+                  codFee: 0,
+                  grandTotal,
+                  paymentMethod: "RAZORPAY",
+                  deliveryMethod,
+                  giftMessage,
+                  orderNotes,
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_payment_id: response.razorpay_payment_id,
                   razorpay_signature: response.razorpay_signature,
@@ -718,40 +772,66 @@ export default function CheckoutPage() {
               </h2>
 
               <div className="space-y-3">
-                {/* Razorpay (UPI, Card, Netbanking) */}
-                {razorpayEnabled && <label
-                  className={`p-4 min-h-[64px] rounded border cursor-pointer flex items-center justify-between transition-all focus-within:ring-2 focus-within:ring-gold-500 ${
-                    paymentMethod === "RAZORPAY"
-                      ? "border-gold-600 bg-gold-50/50"
-                      : "border-ivory-300 bg-white"
+                {/* Razorpay (Cards, UPI, Netbanking) */}
+                <label
+                  className={`p-4 min-h-[64px] rounded border flex items-center justify-between transition-all ${
+                    paymentConfig.razorpayEnabled
+                      ? paymentMethod === "RAZORPAY"
+                        ? "border-gold-600 bg-gold-50/50 cursor-pointer focus-within:ring-2 focus-within:ring-gold-500"
+                        : "border-ivory-300 bg-white cursor-pointer hover:border-gold-400 focus-within:ring-2 focus-within:ring-gold-500"
+                      : "border-ivory-300 bg-ivory-100/60 opacity-90 cursor-not-allowed"
                   }`}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-start gap-3">
                     <input
                       type="radio"
                       name="paymentMethod"
                       checked={paymentMethod === "RAZORPAY"}
-                      onChange={() => setPaymentMethod("RAZORPAY")}
-                      className="text-gold-600 focus:ring-gold-500"
+                      disabled={!paymentConfig.razorpayEnabled}
+                      onChange={() => {
+                        if (paymentConfig.razorpayEnabled) {
+                          setPaymentMethod("RAZORPAY");
+                          setErrorMessage("");
+                        }
+                      }}
+                      className="mt-1 text-gold-600 focus:ring-gold-500 disabled:opacity-40"
                     />
                     <div>
-                      <span className="font-bold text-sm text-charcoal-900 block">
-                        Pay securely with Razorpay
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-charcoal-900 block">
+                          Pay Online via Razorpay
+                        </span>
+                        {paymentConfig.razorpayEnabled ? (
+                          <span className="inline-block rounded-xs bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                            Cards • UPI • Netbanking
+                          </span>
+                        ) : (
+                          <span className="inline-block rounded-xs bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                            Setup Required
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-charcoal-500 block mt-0.5">
+                        Instant, encrypted payment via Credit/Debit Cards, UPI (GPay, PhonePe, Paytm), and Net Banking.
                       </span>
-                      <span className="text-[11px] text-charcoal-100">
-                        Payment methods available through Razorpay depend on your selected payment option.
-                      </span>
+                      {!paymentConfig.razorpayEnabled && !paymentConfig.loading && (
+                        <p className="mt-1.5 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded p-1.5">
+                          Online payments are currently unconfigured. Missing environment variables:{" "}
+                          <code className="font-mono font-semibold">RAZORPAY_KEY_ID</code> and{" "}
+                          <code className="font-mono font-semibold">RAZORPAY_KEY_SECRET</code>. Please select Cash on Delivery.
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <CreditCard className="w-5 h-5 text-gold-600 shrink-0" />
-                </label>}
+                  <CreditCard className="w-5 h-5 text-gold-600 shrink-0 ml-2" />
+                </label>
 
                 {/* Cash on Delivery */}
                 <label
                   className={`p-4 min-h-[64px] rounded border cursor-pointer flex items-center justify-between transition-all focus-within:ring-2 focus-within:ring-gold-500 ${
                     paymentMethod === "COD"
                       ? "border-gold-600 bg-gold-50/50"
-                      : "border-ivory-300 bg-white"
+                      : "border-ivory-300 bg-white hover:border-gold-400"
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -766,14 +846,13 @@ export default function CheckoutPage() {
                       <span className="font-bold text-sm text-charcoal-900 block">
                         Cash on Delivery (COD)
                       </span>
-                      <span className="text-[11px] text-charcoal-100">
-                        Pay when your order is delivered (+₹150 handling fee)
+                      <span className="text-[11px] text-charcoal-500">
+                        Pay upon courier arrival (+₹150 handling fee).
                       </span>
                     </div>
                   </div>
                   <Truck className="w-5 h-5 text-gold-600 shrink-0" />
                 </label>
-
               </div>
             </div>
           </div>

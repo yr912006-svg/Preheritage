@@ -5,8 +5,24 @@ function isConfigured(value: string | undefined) {
 }
 
 export async function GET() {
-  const razorpayEnabled = isConfigured(process.env.RAZORPAY_KEY_ID) &&
-    isConfigured(process.env.RAZORPAY_KEY_SECRET) &&
-    isConfigured(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID);
-  return NextResponse.json({ razorpayEnabled, cashOnDeliveryEnabled: true, stripeEnabled: false }, { headers: { "Cache-Control": "no-store" } });
+  const keyId = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  const hasKeyId = isConfigured(keyId);
+  const hasKeySecret = isConfigured(keySecret);
+  const razorpayEnabled = hasKeyId && hasKeySecret;
+
+  const missingConfig: string[] = [];
+  if (!hasKeyId) missingConfig.push("RAZORPAY_KEY_ID");
+  if (!hasKeySecret) missingConfig.push("RAZORPAY_KEY_SECRET");
+
+  return NextResponse.json(
+    {
+      razorpayEnabled,
+      keyId: razorpayEnabled ? keyId : null,
+      missingConfig,
+      cashOnDeliveryEnabled: true,
+      stripeEnabled: false,
+    },
+    { headers: { "Cache-Control": "no-store" } }
+  );
 }

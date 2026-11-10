@@ -46,7 +46,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const handleQuickAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const result = addToCart(product, selectedSize, product.colors[0]?.name, 1);
+    const result = addToCart(product, selectedSize, product.colors[0]?.name, 1, primaryImage);
     if (!result.success) {
       setQuickAddMessage(result.message || "This selection is unavailable.");
       setTimeout(() => setQuickAddMessage(""), 3000);

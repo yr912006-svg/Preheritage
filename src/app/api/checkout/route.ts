@@ -204,7 +204,17 @@ export async function POST(req: Request) {
       const price = Number(product.price) + Number(variant?.additionalPrice ?? 0);
       if (!Number.isFinite(price) || price <= 0) return NextResponse.json({ success: false, message: `The price for ${product.title} could not be verified.` }, { status: 409 });
       subtotal += price * item.quantity;
-      verifiedItems.push({ product, variant, quantity: item.quantity, price });
+      const inputItem = Array.isArray(body?.items)
+        ? body.items.find((entry: any) => (entry?.productId === item.productId || entry?.id === item.productId) && (entry?.variantId || null) === (item.variantId || null))
+        : null;
+      const requestedImage = typeof inputItem?.image === "string" && inputItem.image.trim() ? inputItem.image.trim() : null;
+      verifiedItems.push({
+        product,
+        variant,
+        quantity: item.quantity,
+        price,
+        image: requestedImage ?? product.images?.[0]?.url ?? null,
+      });
     }
 
     const couponResult = await withTransientRetry(
@@ -350,7 +360,7 @@ export async function POST(req: Request) {
             title: item.product.title, sku: item.variant?.sku ?? item.product.sku,
             size: item.variant?.size ?? null, color: item.variant?.color ?? null,
             price: item.price, quantity: item.quantity, totalPrice: item.price * item.quantity,
-            image: item.product.images?.[0]?.url ?? null,
+            image: item.image ?? item.product.images?.[0]?.url ?? null,
           })) },
           timeline: { create: { status: "PLACED", title: "Order Placed", description: "Order placed with PREHERITAGE." } },
           ...(paymentMethod === "RAZORPAY" ? { payment: { create: {

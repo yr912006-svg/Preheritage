@@ -80,7 +80,8 @@ export function createCartItem(
   product: ProductItem,
   size?: string,
   color?: string,
-  requestedQuantity = 1
+  requestedQuantity = 1,
+  selectedImage?: string
 ): { item: CartItem | null; message?: string } {
   if (product.status && product.status !== "ACTIVE") {
     return { item: null, message: "This product is currently unavailable." };
@@ -107,6 +108,22 @@ export function createCartItem(
     return { item: null, message: "This product price could not be verified." };
   }
 
+  let resolvedImage = typeof selectedImage === "string" && selectedImage.trim() ? selectedImage.trim() : "";
+  if (!resolvedImage) {
+    if (chosenColor && product.colors?.length > 1 && product.images?.length > 1) {
+      const colorIndex = product.colors.findIndex((c) => c.name.toLowerCase() === chosenColor.toLowerCase());
+      if (colorIndex >= 0 && colorIndex < product.images.length) {
+        resolvedImage = product.images[colorIndex];
+      }
+    }
+    if (!resolvedImage && product.images?.length > 0 && !product.images[0].includes("images.unsplash.com")) {
+      resolvedImage = product.images[0];
+    }
+    if (!resolvedImage && product.images?.length > 0) {
+      resolvedImage = product.images[0];
+    }
+  }
+
   return {
     item: {
       id: `${product.id}-${chosenSize}-${chosenColor}`,
@@ -116,7 +133,7 @@ export function createCartItem(
       slug: product.slug,
       price,
       mrp: product.mrp,
-      image: product.images[0] || "",
+      image: resolvedImage || "",
       size: chosenSize,
       color: chosenColor,
       quantity: Math.min(requestedQuantity, maxStock, 20),
@@ -130,8 +147,19 @@ export function mergeCartItem(items: CartItem[], item: CartItem): CartItem[] {
   const existing = current.find((entry) => entry.id === item.id);
   if (!existing) return [...current, item];
   return current.map((entry) => entry.id === item.id
-    ? { ...entry, quantity: Math.min(entry.quantity + item.quantity, entry.maxStock, 20) }
+    ? {
+        ...entry,
+        quantity: Math.min(entry.quantity + item.quantity, entry.maxStock, 20),
+        image: item.image || entry.image,
+      }
     : entry);
+}
+
+export function updateCartItemImage(items: CartItem[], itemId: string, image: string): CartItem[] {
+  if (!image) return normalizeCartItems(items);
+  return normalizeCartItems(items).map((item) => item.id === itemId
+    ? { ...item, image }
+    : item);
 }
 
 export function setCartItemQuantity(items: CartItem[], itemId: string, quantity: number): CartItem[] {

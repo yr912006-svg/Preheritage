@@ -38,7 +38,7 @@ interface ProductPageProps {
 
 export default function ProductDetailPage({ product, relatedProducts, reviews: initialReviews, canReview }: ProductPageProps) {
   const router = useRouter();
-  const { addToCart } = useCart();
+  const { addToCart, updateCartItemImage, cart } = useCart();
   const { toggleWishlist, isInWishlist, wishlistReady } = useWishlist();
 
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -153,15 +153,30 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
   }, [isLightboxOpen, resolvedImages.length]);
 
   const handleAddToCart = () => {
-    const result = addToCart(product, selectedSize, selectedColor, quantity);
+    const selectedImage = resolvedImages[activeImageIndex] || primaryImage;
+    const result = addToCart(product, selectedSize, selectedColor, quantity, selectedImage);
     setCartNotice(result.success ? "Added to your Heritage Bag." : result.message || "This selection could not be added.");
   };
 
   const handleBuyNow = () => {
-    const result = addToCart(product, selectedSize, selectedColor, quantity);
+    const selectedImage = resolvedImages[activeImageIndex] || primaryImage;
+    const result = addToCart(product, selectedSize, selectedColor, quantity, selectedImage);
     if (result.success) router.push("/checkout");
     else setCartNotice(result.message || "This selection could not be added.");
   };
+
+  // Synchronize cart item image if this product or variant is in the bag
+  useEffect(() => {
+    const currentImage = resolvedImages[activeImageIndex] || primaryImage;
+    if (!currentImage) return;
+    const currentItemId = `${product.id}-${selectedSize}-${selectedColor}`;
+    const cartItem = cart.find(
+      (item) => item.id === currentItemId || (item.productId === product.id && item.size === selectedSize && item.color === selectedColor)
+    );
+    if (cartItem && cartItem.image !== currentImage) {
+      updateCartItemImage(cartItem.id, currentImage);
+    }
+  }, [activeImageIndex, selectedSize, selectedColor, resolvedImages, primaryImage, product.id, cart, updateCartItemImage]);
 
   const handleCopyLink = () => {
     if (typeof window !== "undefined") {
@@ -399,7 +414,15 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
                       type="button"
                       disabled={!colorAvailable(c.name)}
                       aria-pressed={selectedColor === c.name}
-                      onClick={() => { setSelectedColor(c.name); setCartNotice(""); }}
+                      onClick={() => {
+                        setSelectedColor(c.name);
+                        setCartNotice("");
+                        const colorIndex = product.colors.findIndex((color) => color.name.toLowerCase() === c.name.toLowerCase());
+                        if (colorIndex >= 0 && colorIndex < resolvedImages.length) {
+                          setActiveImageIndex(colorIndex);
+                          setShowVideo(false);
+                        }
+                      }}
                       className={`group relative inline-flex min-h-10 items-center gap-2 border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                         selectedColor === c.name
                           ? "border-charcoal-900 bg-charcoal-900 text-ivory-50 font-medium"

@@ -82,7 +82,8 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product, isOpen,
   const handleAddToCart = () => {
     if (!canAddToCart) return;
     setIsAdding(true);
-    const result = addToCart(product, selectedSize, selectedColor, quantity);
+    const selectedImage = currentImage;
+    const result = addToCart(product, selectedSize, selectedColor, quantity, selectedImage);
     setIsAdding(false);
     if (result.success) {
       setAddNotice("Added to your shopping bag");
