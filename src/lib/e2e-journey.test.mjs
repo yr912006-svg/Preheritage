@@ -260,19 +260,19 @@ test("E2E Journey 7: Order fulfillment lifecycle state machine", () => {
   assert.equal(canTransitionOrderStatus("CANCELLED", "SHIPPED"), false);
 });
 
-test("E2E Journey 8: Rate limiting enforcement on sensitive auth endpoints", () => {
+test("E2E Journey 8: Rate limiting enforcement on sensitive auth endpoints", async () => {
   const registerLimiter = createRateLimiter({ windowMs: 1000, max: 2 });
   const ip = "203.0.113.42";
 
   // First 2 registration attempts allowed
-  assert.equal(registerLimiter.check(ip).success, true);
-  assert.equal(registerLimiter.check(ip).success, true);
+  assert.equal((await registerLimiter.check(ip)).success, true);
+  assert.equal((await registerLimiter.check(ip)).success, true);
 
   // 3rd attempt blocked with 429
-  const blocked = registerLimiter.check(ip);
+  const blocked = await registerLimiter.check(ip);
   assert.equal(blocked.success, false);
   assert.equal(blocked.remaining, 0);
 
   // Different IP is isolated
-  assert.equal(registerLimiter.check("198.51.100.1").success, true);
+  assert.equal((await registerLimiter.check("198.51.100.1")).success, true);
 });

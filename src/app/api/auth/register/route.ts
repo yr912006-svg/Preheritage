@@ -4,12 +4,12 @@ import prisma from "@/lib/prisma";
 import { CUSTOMER_PASSWORD_POLICY_MESSAGE, isValidCustomerPassword } from "@/lib/customer-password-policy";
 import { createRateLimiter, getClientIp } from "@/lib/rate-limit";
 
-const registerLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
+const registerLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10, prefix: "register" });
 
 export async function POST(req: Request) {
   try {
     const ip = getClientIp(req);
-    const limit = registerLimiter.check(ip);
+    const limit = await registerLimiter.check(ip);
     if (!limit.success) {
       return NextResponse.json(
         { success: false, message: "Too many registration attempts. Please try again later." },

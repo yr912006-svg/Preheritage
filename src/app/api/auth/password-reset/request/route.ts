@@ -5,13 +5,13 @@ import bcrypt from "bcryptjs";
 import { createRateLimiter, getClientIp } from "@/lib/rate-limit";
 
 const resetService = createPasswordResetService({ prisma, hashPassword: (password) => bcrypt.hash(password, 12) });
-const passwordResetLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5 });
+const passwordResetLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5, prefix: "password-reset" });
 const GENERIC_RESPONSE = { message: "If an account matches that email, password reset instructions will be sent shortly." };
 
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
-    const limit = passwordResetLimiter.check(ip);
+    const limit = await passwordResetLimiter.check(ip);
     if (!limit.success) return NextResponse.json(GENERIC_RESPONSE, { status: 202 });
 
     const body = await request.json();
