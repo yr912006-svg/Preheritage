@@ -187,7 +187,7 @@ export default function ContentDashboard() {
       if (philosophyPreview.startsWith("blob:")) URL.revokeObjectURL(philosophyPreview);
       if (categoryPreview.startsWith("blob:")) URL.revokeObjectURL(categoryPreview);
     };
-  }, [preview, philosophyPreview]);
+  }, [preview, philosophyPreview, categoryPreview]);
 
   const resetFormState = () => {
     setSelectedFileName("");

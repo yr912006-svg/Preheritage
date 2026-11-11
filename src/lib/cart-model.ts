@@ -155,6 +155,14 @@ export function mergeCartItem(items: CartItem[], item: CartItem): CartItem[] {
     : entry);
 }
 
+export function mergeCartItemLists(baseItems: CartItem[], incomingItems: CartItem[]): CartItem[] {
+  let result = normalizeCartItems(baseItems);
+  for (const item of normalizeCartItems(incomingItems)) {
+    result = mergeCartItem(result, item);
+  }
+  return result;
+}
+
 export function updateCartItemImage(items: CartItem[], itemId: string, image: string): CartItem[] {
   if (!image) return normalizeCartItems(items);
   return normalizeCartItems(items).map((item) => item.id === itemId

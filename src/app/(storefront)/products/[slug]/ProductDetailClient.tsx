@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -71,10 +71,15 @@ export default function ProductDetailPage({ product, relatedProducts, reviews: i
   const [reviewNotice, setReviewNotice] = useState("");
 
   const isFavorited = isInWishlist(product.id);
-  const sampleProduct = SAMPLE_PRODUCTS.find((p) => p.slug === product.slug || p.id === product.id);
-  const resolvedImages = (product.images && product.images.length > 0 && !product.images[0].includes("images.unsplash.com"))
-    ? product.images
-    : (sampleProduct?.images || product.images || []);
+  const sampleProduct = useMemo(
+    () => SAMPLE_PRODUCTS.find((p) => p.slug === product.slug || p.id === product.id),
+    [product.slug, product.id]
+  );
+  const resolvedImages = useMemo(() => {
+    return (product.images && product.images.length > 0 && !product.images[0].includes("images.unsplash.com"))
+      ? product.images
+      : (sampleProduct?.images || product.images || []);
+  }, [product.images, sampleProduct]);
   const primaryImage = resolvedImages[0] || "";
 
   const hasVariants = Boolean(product.variants?.length);

@@ -7,6 +7,7 @@ import {
   calculateShippingCharge,
   createCartItem,
   mergeCartItem,
+  mergeCartItemLists,
   normalizeCartItems,
   normalizeCheckoutItems,
   removeCartItem,
@@ -64,6 +65,32 @@ test("adding the same variant increments quantity; quantity changes and removal 
   assert.equal(two[0].quantity, 2);
   assert.equal(setCartItemQuantity(two, first.id, 3)[0].quantity, 3);
   assert.deepEqual(removeCartItem(two, first.id), []);
+});
+
+test("merging guest cart with account cart combines disjoint items and clamps shared items", () => {
+  const itemA = createCartItem(product, "Free Size", "Antique Gold", 1).item;
+  const itemB = { ...itemA, id: "product-2-standard-red", productId: "product-2", quantity: 2, maxStock: 5 };
+  assert.ok(itemA && itemB);
+
+  // When account cart has itemA (qty 1) and guest has itemA (qty 2) + itemB (qty 2)
+  const guestCart = [{ ...itemA, quantity: 2 }, itemB];
+  const accountCart = [itemA];
+
+  const merged = mergeCartItemLists(accountCart, guestCart);
+  assert.equal(merged.length, 2);
+  const foundA = merged.find((item) => item.id === itemA.id);
+  const foundB = merged.find((item) => item.id === itemB.id);
+  assert.equal(foundA?.quantity, 3); // 1 + 2 = 3
+  assert.equal(foundB?.quantity, 2); // new guest item retained
+});
+
+test("merging guest cart with duplicate items collapses them safely", () => {
+  const itemA = createCartItem(product, "Free Size", "Antique Gold", 1).item;
+  assert.ok(itemA);
+  const guestCartWithDupes = [itemA, itemA, { ...itemA, quantity: 2 }];
+  const merged = mergeCartItemLists([], guestCartWithDupes);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].quantity, 4); // 1 + 1 + 2 = 4
 });
 
 test("refresh normalization drops stale zero-quantity and zero-price local entries", () => {

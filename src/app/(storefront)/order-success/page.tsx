@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useState } from "react";
+import React, { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, PackageCheck, Truck, Download, ArrowRight, ShieldCheck } from "lucide-react";
@@ -13,6 +13,28 @@ function OrderSuccessContent() {
   const [verifiedOrder, setVerifiedOrder] = useState<any>(null);
   const [lookupError, setLookupError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!orderId) return;
+    let active = true;
+    void fetch("/api/orders/lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderNumber: orderId, email: "" }),
+    })
+      .then(async (response) => {
+        if (!active) return;
+        if (response.ok) {
+          const data = await response.json();
+          if (data.order) setVerifiedOrder(data.order);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [orderId]);
+
   const verifyOrder = async (event: React.FormEvent) => {
     event.preventDefault(); setLookupError(""); setLoading(true);
     try {

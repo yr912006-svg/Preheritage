@@ -9,6 +9,7 @@ import {
   calculateShippingCharge,
   createCartItem,
   mergeCartItem,
+  mergeCartItemLists,
   normalizeCartItems,
   removeCartItem,
   setCartItemQuantity,
@@ -60,6 +61,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [accountCart, setAccountCart] = useState(false);
   const [cartSyncError, setCartSyncError] = useState("");
   const quantityUpdatesInFlight = useRef(new Set<string>());
+  const pendingGuestItemsRef = useRef<CartItem[]>([]);
 
   const syncAccountCart = (init?: RequestInit) => {
     void fetch("/api/account/cart", init)
@@ -77,6 +79,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const savedCart = localStorage.getItem("preheritage_cart");
         const savedLater = localStorage.getItem("preheritage_saved_later");
         const items = normalizeCartItems(savedCart ? JSON.parse(savedCart) : []);
+        pendingGuestItemsRef.current = items;
         setCart((prev) => (prev.length > 0 ? prev : items));
         setSavedForLater(normalizeCartItems(savedLater ? JSON.parse(savedLater) : []));
         localStorage.removeItem("preheritage_coupon");
@@ -151,9 +154,57 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           maxStock: item.maxStock,
         })));
 
-        // Keep items already restored from this browser while merging the
-        // account cart. Prefer the greater quantity for matching variants.
-        setCart(accountItems);
+        const guestItems = pendingGuestItemsRef.current;
+        if (guestItems.length > 0) {
+          pendingGuestItemsRef.current = [];
+          const optimisticMerged = mergeCartItemLists(accountItems, guestItems);
+          setCart(optimisticMerged);
+
+          void fetch("/api/account/cart", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "merge",
+              items: guestItems.map((item) => ({
+                productId: item.productId,
+                variantId: item.variantId || null,
+                quantity: item.quantity,
+              })),
+            }),
+          })
+            .then(async (mergeRes) => {
+              if (!active) return;
+              if (mergeRes.ok) {
+                try {
+                  localStorage.removeItem("preheritage_cart");
+                  localStorage.removeItem("preheritage_saved_later");
+                } catch {
+                  // ignore
+                }
+                const mergeData = await mergeRes.json();
+                if (mergeData?.items) {
+                  const serverItems = normalizeCartItems(mergeData.items.map((item: any) => ({
+                    id: `${item.productId}-${item.size}-${item.color}`,
+                    productId: item.productId,
+                    variantId: item.variantId || undefined,
+                    title: item.product.title,
+                    slug: item.product.slug,
+                    price: item.price,
+                    mrp: item.product.mrp,
+                    image: item.product.images[0] || "",
+                    size: item.size,
+                    color: item.color,
+                    quantity: item.quantity,
+                    maxStock: item.maxStock,
+                  })));
+                  setCart(serverItems);
+                }
+              }
+            })
+            .catch(() => undefined);
+        } else {
+          setCart(accountItems);
+        }
       }
       setAccountCart(true);
     }).catch(() => undefined);

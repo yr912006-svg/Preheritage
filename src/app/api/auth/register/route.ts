@@ -2,9 +2,21 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
 import { CUSTOMER_PASSWORD_POLICY_MESSAGE, isValidCustomerPassword } from "@/lib/customer-password-policy";
+import { createRateLimiter, getClientIp } from "@/lib/rate-limit";
+
+const registerLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
 
 export async function POST(req: Request) {
   try {
+    const ip = getClientIp(req);
+    const limit = registerLimiter.check(ip);
+    if (!limit.success) {
+      return NextResponse.json(
+        { success: false, message: "Too many registration attempts. Please try again later." },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
     const name = typeof body?.name === "string" ? body.name.trim() : "";
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";

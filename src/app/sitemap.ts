@@ -9,6 +9,7 @@ const baseUrl = getSiteUrl();
 const staticRoutes = [
   "",
   "/shop",
+  "/collections",
   "/collections/mens-ethnic-wear",
   "/about",
   "/contact",
