@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getCustomerUser } from "@/lib/account-auth";
 
-export async function POST(request: Request, { params }: { params: { productId: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ productId: string }> }) {
+  const { productId } = await params;
   const user = await getCustomerUser();
   if (!user) return NextResponse.json({ message: "Sign in to submit a verified-purchase review." }, { status: 401 });
   try {
@@ -12,7 +13,7 @@ export async function POST(request: Request, { params }: { params: { productId: 
     if (!Number.isInteger(rating) || rating < 1 || rating > 5 || comment.length < 8 || comment.length > 3000) {
       return NextResponse.json({ message: "Choose a rating and write a review between 8 and 3,000 characters." }, { status: 400 });
     }
-    const product = await prisma.product.findFirst({ where: { id: params.productId, status: "ACTIVE" }, select: { id: true } });
+    const product = await prisma.product.findFirst({ where: { id: productId, status: "ACTIVE" }, select: { id: true } });
     if (!product) return NextResponse.json({ message: "Product not found." }, { status: 404 });
     const purchase = await prisma.orderItem.findFirst({ where: { productId: product.id, order: { userId: user.id, status: "DELIVERED" } }, select: { id: true } });
     if (!purchase) return NextResponse.json({ message: "A delivered purchase of this piece is required before reviewing it." }, { status: 403 });

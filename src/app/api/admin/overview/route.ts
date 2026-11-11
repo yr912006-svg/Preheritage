@@ -1,4 +1,4 @@
-﻿
+
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAdminCapability } from "@/lib/account-auth";
@@ -13,19 +13,10 @@ async function getOverview(_request: Request) {
       "customers.directory.read"
     );
 
-    const dateParts = new Intl.DateTimeFormat("en-GB", {
+    // Calculate today's start in Indian Standard Time.
+    const indiaDate = new Date().toLocaleDateString("en-CA", {
       timeZone: "Asia/Kolkata",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(new Date());
-
-    const datePart = (type: string) =>
-      dateParts.find((part) => part.type === type)?.value ?? "";
-
-    const indiaDate =
-      `${datePart("year")}-${datePart("month")}-${datePart("day")}`;
-
+    });
     const startOfToday = new Date(`${indiaDate}T00:00:00+05:30`);
 
     const [
@@ -87,7 +78,7 @@ async function getOverview(_request: Request) {
 
     if (inventoryAccess.status === 200) {
       const products = await prisma.product.findMany({
-        where: { status: "ACTIVE" },
+        where: { status: { not: "ARCHIVED" } },
         select: {
           stock: true,
           status: true,
@@ -98,25 +89,25 @@ async function getOverview(_request: Request) {
         },
       });
 
-      lowStockCount = products.filter(
-        (product) =>
-          getSellableStock(product) <= product.lowStockAlert
-      ).length;
+      lowStockCount = products.filter((product) => {
+        const stock = getSellableStock(product);
+        return stock <= product.lowStockAlert;
+      }).length;
     }
 
     if (customerAccess.status === 200) {
-      customerCount = await prisma.user.count({
-        where: { role: "CUSTOMER" },
-      });
+      customerCount = await prisma.user.count();
     }
 
     return NextResponse.json({
       generatedAt: new Date().toISOString(),
       metrics: {
         todayOrders,
-        todayPaidSales: todayPaidOrders._sum.totalAmount ?? 0,
+        todayPaidSales:
+          todayPaidOrders._sum.totalAmount ?? 0,
         totalOrders,
-        totalPaidRevenue: totalPaidOrders._sum.totalAmount ?? 0,
+        totalPaidRevenue:
+          totalPaidOrders._sum.totalAmount ?? 0,
         activeProducts,
         lowStockCount,
         customerCount,

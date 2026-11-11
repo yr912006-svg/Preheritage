@@ -3,7 +3,16 @@ import type { ProductItem } from "@/lib/sample-data";
 import { getSellableStock } from "@/lib/inventory";
 
 export const catalogProductInclude = {
-  category: true,
+  category: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+      image: true,
+      orderIndex: true,
+    },
+  },
   subcategory: true,
   collection: true,
   region: true,
@@ -14,7 +23,16 @@ export const catalogProductInclude = {
 
 export type CatalogProduct = Prisma.ProductGetPayload<{ include: typeof catalogProductInclude }>;
 
-export type StorefrontCategory = { id: string; name: string; slug: string; description: string | null; image: string | null; orderIndex: number };
+export type StorefrontCategory = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  image: string | null;
+  imageAlt?: string | null;
+  focalPoint?: string | null;
+  orderIndex: number;
+};
 export type StorefrontCollection = { id: string; name: string; slug: string; tagline: string | null; description: string | null; bannerImage: string | null };
 export type StorefrontRegion = { id: string; name: string; slug: string; state: string; culturalStory: string; craftForm: string; bannerImage: string | null };
 
@@ -32,7 +50,7 @@ export function toProductItem(product: CatalogProduct): ProductItem {
     slug: product.slug,
     sku: product.sku,
     createdAt: product.createdAt.toISOString(),
-    category: product.category.slug,
+    category: product.category?.slug || "sarees",
     subcategory: product.subcategory?.slug || undefined,
     collection: product.collection?.slug || undefined,
     region: product.region?.slug || "",

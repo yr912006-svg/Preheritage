@@ -27,10 +27,18 @@ export default function ProductEditor({ productId }: { productId?: string }) {
   const [images, setImages] = useState<ImageDraft[]>([]);
   const [primaryIndex, setPrimaryIndex] = useState(0);
   const [variants, setVariants] = useState<VariantDraft[]>([]);
-  const [loading, setLoading] = useState(Boolean(productId));
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [imageUrlInput, setImageUrlInput] = useState("");
+
+  const addImageByUrl = () => {
+    const url = imageUrlInput.trim();
+    if (!url) return;
+    setImages((current) => [...current, { url, altText: "", status: "uploaded" }]);
+    setImageUrlInput("");
+  };
 
   useEffect(() => {
     let active = true;
@@ -49,7 +57,10 @@ export default function ProductEditor({ productId }: { productId?: string }) {
           if (!active) return;
           setDraft({
             ...emptyDraft, ...product,
-            subcategoryId: product.subcategoryId || "", collectionId: product.collectionId || "", regionId: product.regionId || "",
+            categoryId: product.categoryId || product.category?.id || "",
+            subcategoryId: product.subcategoryId || product.subcategory?.id || "",
+            collectionId: product.collectionId || product.collection?.id || "",
+            regionId: product.regionId || product.region?.id || "",
             costPrice: product.costPrice ?? "", videoUrl: product.videoUrl || "", seoTitle: product.seoTitle || "", seoDescription: product.seoDescription || "",
           });
           const loadedImages = product.images.map((image: { url: string; altText: string | null }) => ({ url: image.url, altText: image.altText || "", status: "uploaded" as const }));
@@ -57,7 +68,12 @@ export default function ProductEditor({ productId }: { productId?: string }) {
           setPrimaryIndex(Math.max(0, product.images.findIndex((image: { isPrimary: boolean }) => image.isPrimary)));
           setVariants(product.variants.map((variant: VariantDraft) => ({ ...variant, colorCode: variant.colorCode || "" })));
         } else {
-          setDraft((current) => ({ ...current, categoryId: taxonomyData.categories[0]?.id || "", regionId: taxonomyData.regions[0]?.id || "" }));
+          setDraft((current) => ({
+            ...current,
+            categoryId: "",
+            subcategoryId: "",
+            regionId: current.regionId || "",
+          }));
         }
       } catch (reason) { if (active) setError(reason instanceof Error ? reason.message : "Could not load product form."); }
       finally { if (active) setLoading(false); }
@@ -71,21 +87,64 @@ export default function ProductEditor({ productId }: { productId?: string }) {
   const uploadImages = async (fileList: FileList | null) => {
     if (!fileList?.length) return;
     const files = Array.from(fileList);
-    if (files.some((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type) || !file.size || file.size > 10 * 1024 * 1024)) { setError("Choose JPEG, PNG, or WebP images smaller than 10 MB each."); return; }
-    setError(""); setUploading(true);
+    if (files.some((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type) || !file.size || file.size > 10 * 1024 * 1024)) {
+      setError("Choose JPEG, PNG, or WebP images smaller than 10 MB each.");
+      return;
+    }
+    setError("");
+    setUploading(true);
     const begin = images.length;
     setImages((current) => [...current, ...files.map(() => ({ url: "", altText: "", status: "uploading" as const }))]);
+
     try {
-      const form = new FormData(); files.forEach((file) => form.append("files", file));
-      const response = await fetch("/api/storage/upload", { method: "POST", body: form });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Image upload failed.");
-      setImages((current) => { const next = [...current]; result.uploads.forEach((item: { url: string }, index: number) => { next[begin + index] = { url: item.url, altText: "", status: "uploaded" }; }); return next; });
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const presignRes = await fetch("/api/storage/presign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }),
+        });
+
+        let presignData: any = null;
+        const contentType = presignRes.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          try {
+            presignData = await presignRes.json();
+          } catch {
+            presignData = null;
+          }
+        }
+
+        if (!presignRes.ok) {
+          if (presignRes.status === 413) throw new Error("Image file is too large (maximum 10 MB).");
+          throw new Error(presignData?.error || presignData?.message || `Upload authorization failed (${presignRes.status}).`);
+        }
+
+        const { uploadUrl, url } = presignData;
+        const uploadRes = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+
+        if (!uploadRes.ok) {
+          if (uploadRes.status === 413) throw new Error("Image file is too large (maximum 10 MB).");
+          throw new Error(`Direct storage upload failed (${uploadRes.status} ${uploadRes.statusText}).`);
+        }
+
+        setImages((current) => {
+          const next = [...current];
+          next[begin + i] = { url, altText: "", status: "uploaded" };
+          return next;
+        });
+      }
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Image upload failed.";
-      setImages((current) => current.map((image, index) => index >= begin && index < begin + files.length ? { ...image, status: "failed", error: message } : image));
+      setImages((current) => current.map((image, index) => index >= begin && index < begin + files.length && image.status === "uploading" ? { ...image, status: "failed", error: message } : image));
       setError(message);
-    } finally { setUploading(false); }
+    } finally {
+      setUploading(false);
+    }
   };
 
   const moveImage = (index: number, delta: number) => setImages((current) => {
@@ -101,9 +160,16 @@ export default function ProductEditor({ productId }: { productId?: string }) {
       const readyPrimaryIndex = Math.max(0, images.slice(0, primaryIndex).filter((image) => image.status === "uploaded").length);
       const payload = { ...draft, productId, stock: variants.length ? 0 : draft.stock, costPrice: draft.costPrice === "" ? null : draft.costPrice, images: readyImages.map(({ url, altText }) => ({ url, altText })), primaryImageIndex: readyPrimaryIndex, variants };
       const response = await fetch("/api/admin/products", { method: productId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message || "Product could not be saved.");
-      router.push("/admin/products"); router.refresh();
+      let result: any = null;
+      if (response.headers.get("content-type")?.includes("application/json")) {
+        try {
+          result = await response.json();
+        } catch {
+          result = null;
+        }
+      }
+      if (!response.ok) throw new Error(result?.message || result?.error || `Product could not be saved (${response.status}).`);
+      window.location.href = "/admin/products";
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Product could not be saved."); }
     finally { setSaving(false); }
   };
@@ -116,8 +182,60 @@ export default function ProductEditor({ productId }: { productId?: string }) {
       <section className="grid gap-4 rounded border border-ivory-300 bg-ivory-50 p-6 sm:grid-cols-2"><h2 className="sm:col-span-2 font-serif text-xl font-bold">Product details</h2>
         <label className="space-y-1 font-semibold sm:col-span-2">Title<input required minLength={3} maxLength={180} className={fieldClass} value={draft.title} onChange={(event) => set("title", event.target.value)} /></label>
         <label className="space-y-1 font-semibold">SKU<input required maxLength={50} className={fieldClass} value={draft.sku} onChange={(event) => set("sku", event.target.value.toUpperCase())} /></label>
-        <label className="space-y-1 font-semibold">Category<select required className={fieldClass} value={draft.categoryId} onChange={(event) => setDraft((current) => ({ ...current, categoryId: event.target.value, subcategoryId: "" }))}><option value="">Choose category</option>{taxonomy.categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label className="space-y-1 font-semibold">Subcategory<select className={fieldClass} value={draft.subcategoryId} onChange={(event) => set("subcategoryId", event.target.value)}><option value="">None</option>{subcategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label className="space-y-1 font-semibold">
+          Category
+          <select
+            required
+            className={fieldClass}
+            value={draft.categoryId}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                categoryId: event.target.value,
+                subcategoryId: "",
+              }))
+            }
+          >
+            <option value="">
+              {taxonomy.categories.length === 0 ? "No categories configured" : "Choose category"}
+            </option>
+            {taxonomy.categories.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          {taxonomy.categories.length === 0 && (
+            <p className="mt-1 text-[11px] font-normal text-amber-800">
+              No categories configured yet. Add categories in{" "}
+              <Link href="/admin/catalog" className="underline font-semibold">
+                Catalogue Taxonomy
+              </Link>.
+            </p>
+          )}
+        </label>
+        <label className="space-y-1 font-semibold">
+          Subcategory
+          <select
+            className={fieldClass}
+            value={draft.subcategoryId}
+            onChange={(event) => set("subcategoryId", event.target.value)}
+            disabled={!draft.categoryId}
+          >
+            <option value="">
+              {!draft.categoryId
+                ? "Select a category first"
+                : subcategories.length === 0
+                ? "None (no subcategories in this category)"
+                : "None"}
+            </option>
+            {subcategories.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="space-y-1 font-semibold">Collection<select className={fieldClass} value={draft.collectionId} onChange={(event) => set("collectionId", event.target.value)}><option value="">None</option>{taxonomy.collections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label className="space-y-1 font-semibold">Cultural region<select className={fieldClass} value={draft.regionId} onChange={(event) => set("regionId", event.target.value)}><option value="">None</option>{taxonomy.regions.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.craftForm}</option>)}</select></label>
         <label className="space-y-1 font-semibold">Short description<input maxLength={500} className={fieldClass} value={draft.shortDesc} onChange={(event) => set("shortDesc", event.target.value)} /></label>
@@ -142,7 +260,29 @@ export default function ProductEditor({ productId }: { productId?: string }) {
         {variants.map((variant, index) => <div key={variant.id || index} className="grid gap-2 border-t border-ivory-200 pt-3 sm:grid-cols-6"><input aria-label="Variant SKU" required placeholder="SKU" className={fieldClass} value={variant.sku} onChange={(event) => setVariants((current) => current.map((item, i) => i === index ? { ...item, sku: event.target.value.toUpperCase() } : item))} /><input aria-label="Variant size" required placeholder="Size" className={fieldClass} value={variant.size} onChange={(event) => setVariants((current) => current.map((item, i) => i === index ? { ...item, size: event.target.value } : item))} /><input aria-label="Variant color" required placeholder="Color" className={fieldClass} value={variant.color} onChange={(event) => setVariants((current) => current.map((item, i) => i === index ? { ...item, color: event.target.value } : item))} /><input aria-label="Variant color code" placeholder="#FFFFFF" className={fieldClass} value={variant.colorCode} onChange={(event) => setVariants((current) => current.map((item, i) => i === index ? { ...item, colorCode: event.target.value } : item))} /><input aria-label="Variant stock" required type="number" min="0" max="100000" className={fieldClass} value={variant.stock} onChange={(event) => setVariants((current) => current.map((item, i) => i === index ? { ...item, stock: Number(event.target.value) } : item))} /><div className="flex gap-1"><input aria-label="Additional price" type="number" min="0" step="0.01" className={fieldClass} value={variant.additionalPrice} onChange={(event) => setVariants((current) => current.map((item, i) => i === index ? { ...item, additionalPrice: Number(event.target.value) } : item))} /><button type="button" aria-label="Remove variant" onClick={() => setVariants((current) => current.filter((_, i) => i !== index))} className="rounded border border-rose-300 px-2 text-rose-800"><Trash2 className="h-4 w-4" /></button></div></div>)}
       </section>
 
-      <section className="space-y-3 rounded border border-ivory-300 bg-ivory-50 p-6"><h2 className="font-serif text-xl font-bold">Product images</h2><p className="text-[11px] text-charcoal-500">JPEG, PNG or WebP, up to 10 MB each. Images use the existing authenticated object-storage upload.</p><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => { void uploadImages(event.target.files); event.currentTarget.value = ""; }} />
+      <section className="space-y-3 rounded border border-ivory-300 bg-ivory-50 p-6">
+        <h2 className="font-serif text-xl font-bold">Product images</h2>
+        <p className="text-[11px] text-charcoal-500">JPEG, PNG or WebP, up to 10 MB each. Images use the existing authenticated object-storage upload.</p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => { void uploadImages(event.target.files); event.currentTarget.value = ""; }} />
+          <div className="flex items-center gap-2 pt-2 sm:pt-0">
+            <span className="text-[11px] text-charcoal-400">or URL:</span>
+            <input
+              type="text"
+              placeholder="/images/products/... or https://..."
+              value={imageUrlInput}
+              onChange={(e) => setImageUrlInput(e.target.value)}
+              className="w-56 rounded border border-ivory-300 bg-white px-2 py-1 text-xs focus:border-gold-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={addImageByUrl}
+              className="rounded bg-charcoal-900 px-2.5 py-1 text-xs font-semibold text-white hover:bg-gold-600 transition-colors"
+            >
+              Add image URL
+            </button>
+          </div>
+        </div>
         <div className="grid gap-3 sm:grid-cols-3">{images.map((image, index) => <div key={`${image.url}-${index}`} className="overflow-hidden rounded border border-ivory-300 bg-white"><div className="relative aspect-[3/4] bg-ivory-200">{image.url && image.status === "uploaded" && <Image src={image.url} alt={image.altText || `Product image ${index + 1}`} fill unoptimized className="object-cover" />}{image.status !== "uploaded" && <div className="absolute inset-0 grid place-items-center p-3 text-center text-xs">{image.error || "Uploading…"}</div>}{primaryIndex === index && image.status === "uploaded" && <span className="absolute left-2 top-2 bg-gold-600 px-2 py-1 text-[10px] font-bold text-white">Primary</span>}</div><input aria-label={`Image ${index + 1} alt text`} maxLength={240} placeholder="Image alt text" className="w-full border-y border-ivory-200 p-2 text-xs" value={image.altText} onChange={(event) => setImages((current) => current.map((item, i) => i === index ? { ...item, altText: event.target.value } : item))} /><div className="flex items-center justify-between p-2"><button type="button" title="Move image earlier" onClick={() => moveImage(index, -1)}><ChevronUp className="h-4 w-4" /></button><button type="button" onClick={() => setPrimaryIndex(index)} disabled={image.status !== "uploaded"} title="Set primary image"><Star className={`h-4 w-4 ${primaryIndex === index ? "fill-gold-500 text-gold-600" : ""}`} /></button><button type="button" title="Move image later" onClick={() => moveImage(index, 1)}><ChevronDown className="h-4 w-4" /></button><button type="button" title="Remove image" onClick={() => { setImages((current) => current.filter((_, i) => i !== index)); setPrimaryIndex((current) => Math.max(0, current > index ? current - 1 : current)); }}><Trash2 className="h-4 w-4 text-rose-700" /></button></div></div>)}</div>
       </section>
 

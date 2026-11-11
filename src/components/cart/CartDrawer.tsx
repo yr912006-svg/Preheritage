@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { X, Plus, Minus, Trash2, ArrowRight, ShieldCheck, Tag } from "lucide-react";
 import { useCart } from "@/context/CartContext";
@@ -16,30 +16,57 @@ export const CartDrawer: React.FC = () => {
     updateQuantity,
     subtotal,
     discountAmount,
+    shippingCharge,
     total,
     freeShippingRemaining,
     freeShippingThreshold,
     appliedCoupon,
     applyCoupon,
     removeCoupon,
+    cartSyncError,
   } = useCart();
 
   const [couponInput, setCouponInput] = useState("");
+  const [couponEmail, setCouponEmail] = useState("");
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
   const [couponMsg, setCouponMsg] = useState<{ text: string; isError: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!appliedCoupon && couponMsg && !couponMsg.isError) setCouponMsg(null);
+  }, [appliedCoupon, couponMsg]);
+
+  useEffect(() => {
+    if (!isCartOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsCartOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isCartOpen, setIsCartOpen]);
 
   if (!isCartOpen) return null;
 
-  const handleApply = (e: React.FormEvent) => {
+  const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!couponInput) return;
-    const res = applyCoupon(couponInput);
-    setCouponMsg({ text: res.message, isError: !res.success });
+    if (!couponInput || applyingCoupon) return;
+    setApplyingCoupon(true);
+    try {
+      const res = await applyCoupon(couponInput, couponEmail);
+      setCouponMsg({ text: res.message, isError: !res.success });
+    } finally { setApplyingCoupon(false); }
   };
 
   const freeShippingPercent = Math.min(100, Math.round(((freeShippingThreshold - freeShippingRemaining) / freeShippingThreshold) * 100));
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 overflow-hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Shopping bag drawer"
+    >
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-charcoal-900/60 backdrop-blur-sm transition-opacity"
@@ -58,12 +85,14 @@ export const CartDrawer: React.FC = () => {
             </div>
             <button
               onClick={() => setIsCartOpen(false)}
-              className="p-2 text-charcoal-200 hover:text-charcoal-900 transition-colors rounded-full hover:bg-ivory-200"
-              aria-label="Close cart"
+              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-charcoal-200 hover:text-charcoal-900 transition-colors rounded-full hover:bg-ivory-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
+              aria-label="Close cart drawer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          {cartSyncError && <p role="alert" className="border-b border-rose-300 bg-rose-50 px-5 py-3 text-xs text-rose-800">{cartSyncError}</p>}
 
           {/* Free Shipping Progress Bar */}
           <div className="bg-ivory-200/80 px-5 py-3 border-b border-ivory-300">
@@ -127,7 +156,8 @@ export const CartDrawer: React.FC = () => {
                         </Link>
                         <button
                           onClick={() => removeFromCart(item.id)}
-                          className="text-charcoal-100 hover:text-rose-600 ml-2"
+                          className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-charcoal-100 hover:text-rose-600 ml-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded"
+                          aria-label={`Remove ${item.title} from bag`}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -142,22 +172,33 @@ export const CartDrawer: React.FC = () => {
 
                     <div className="flex items-center justify-between mt-3">
                       {/* Quantity Controls */}
-                      <div className="flex items-center border border-ivory-300 rounded bg-white">
-                        <button
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          className="p-1 hover:bg-ivory-100 text-charcoal-300 transition-colors"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="px-2.5 text-xs font-semibold text-charcoal-900">
-                          {item.quantity}
-                        </span>
-                        <button
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="p-1 hover:bg-ivory-100 text-charcoal-300 transition-colors"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
+                      <div className="flex items-center">
+                        <div className="flex items-center border border-ivory-300 rounded bg-white">
+                          <button
+                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            disabled={item.quantity <= 1}
+                            className="min-w-[40px] sm:min-w-[44px] min-h-[40px] sm:min-h-[44px] flex items-center justify-center hover:bg-ivory-100 text-charcoal-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded-l disabled:opacity-40 disabled:cursor-not-allowed"
+                            aria-label={`Decrease quantity of ${item.title}`}
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="px-2.5 text-xs font-semibold text-charcoal-900 select-none min-w-[24px] text-center" aria-live="polite">
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            disabled={item.maxStock !== undefined && item.quantity >= item.maxStock}
+                            className="min-w-[40px] sm:min-w-[44px] min-h-[40px] sm:min-h-[44px] flex items-center justify-center hover:bg-ivory-100 text-charcoal-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded-r disabled:opacity-40 disabled:cursor-not-allowed"
+                            aria-label={`Increase quantity of ${item.title}`}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {item.maxStock !== undefined && item.quantity >= item.maxStock && (
+                          <span className="text-[10px] text-amber-700 ml-2 font-medium">
+                            Max {item.maxStock} available
+                          </span>
+                        )}
                       </div>
 
                       {/* Price */}
@@ -196,20 +237,32 @@ export const CartDrawer: React.FC = () => {
                     </button>
                   </div>
                 ) : (
-                  <form onSubmit={handleApply} className="flex gap-2">
+                  <form onSubmit={handleApply} className="space-y-2">
+                    <input
+                      type="email"
+                      placeholder="Checkout email (for eligibility)"
+                      value={couponEmail}
+                      onChange={(e) => setCouponEmail(e.target.value)}
+                      required
+                      className="w-full bg-white border border-ivory-300 px-3 py-2 text-xs rounded"
+                    />
+                    <div className="flex gap-2">
                     <input
                       type="text"
-                      placeholder="Coupon Code (e.g. HERITAGE10)"
+                      placeholder="Enter coupon code"
                       value={couponInput}
                       onChange={(e) => setCouponInput(e.target.value)}
+                      required
                       className="flex-1 bg-white border border-ivory-300 px-3 py-2 text-xs uppercase focus:outline-none focus:border-gold-500 rounded"
                     />
                     <button
                       type="submit"
+                      disabled={applyingCoupon}
                       className="bg-charcoal-800 text-ivory-50 px-4 py-2 text-xs font-medium uppercase tracking-wider hover:bg-gold-600 transition-colors rounded"
                     >
-                      Apply
+                      {applyingCoupon ? "Checking…" : "Apply"}
                     </button>
+                    </div>
                   </form>
                 )}
                 {couponMsg && (
@@ -233,7 +286,7 @@ export const CartDrawer: React.FC = () => {
                 )}
                 <div className="flex justify-between">
                   <span>Shipping</span>
-                  <span>{freeShippingRemaining === 0 ? "FREE" : formatPrice(250)}</span>
+                  <span>{shippingCharge === 0 ? "FREE" : formatPrice(shippingCharge)}</span>
                 </div>
                 <div className="flex justify-between font-serif font-bold text-base text-charcoal-900 pt-2 border-t border-ivory-300">
                   <span>Estimated Total</span>
@@ -245,11 +298,21 @@ export const CartDrawer: React.FC = () => {
               <Link
                 href="/checkout"
                 onClick={() => setIsCartOpen(false)}
-                className="w-full flex items-center justify-center gap-2 py-3.5 bg-charcoal-900 text-ivory-50 text-xs uppercase tracking-[0.2em] font-semibold hover:bg-gold-600 transition-colors shadow-luxury rounded"
+                className="w-full min-h-[48px] flex items-center justify-center gap-2 py-3.5 bg-charcoal-900 text-ivory-50 text-xs uppercase tracking-[0.2em] font-semibold hover:bg-gold-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 transition-colors shadow-luxury rounded"
               >
                 <span>Proceed to Checkout</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
+
+              <div className="flex items-center justify-between text-xs pt-1">
+                <Link
+                  href="/cart"
+                  onClick={() => setIsCartOpen(false)}
+                  className="w-full text-center text-charcoal-300 hover:text-gold-700 underline font-medium transition-colors py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 rounded"
+                >
+                  View Full Shopping Bag & Privileges
+                </Link>
+              </div>
 
               <div className="flex items-center justify-center gap-2 text-[10px] text-charcoal-100">
                 <ShieldCheck className="w-3.5 h-3.5 text-gold-500" />

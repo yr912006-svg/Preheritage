@@ -5,7 +5,9 @@ import { ProductItem } from "@/lib/sample-data";
 
 interface WishlistContextType {
   wishlist: ProductItem[];
+  wishlistReady: boolean;
   addToWishlist: (product: ProductItem) => void;
+  addToWishlistFromCart: (product: ProductItem) => Promise<{ success: boolean; message?: string }>;
   removeFromWishlist: (productId: string) => void;
   toggleWishlist: (product: ProductItem) => void;
   isInWishlist: (productId: string) => boolean;
@@ -46,8 +48,10 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const isCustomer = Boolean(user?.id && user.role === "CUSTOMER");
       setAccountWishlist(isCustomer);
       setWishlist([]);
-      if (!isCustomer) restoreGuestWishlist();
-      setWishlistReady(true);
+      if (!isCustomer) {
+        restoreGuestWishlist();
+        setWishlistReady(true);
+      }
     }).catch(() => {
       if (!active) return;
       setAccountWishlist(false);
@@ -58,7 +62,7 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   useEffect(() => {
-    if (!wishlistReady || !accountWishlist) return;
+    if (!accountWishlist) return;
     let active = true;
     void fetch("/api/account/wishlist").then(async (response) => {
       if (response.status === 401) {
@@ -75,10 +79,11 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const data = await response.json();
       if (!active) return;
       setWishlist(data.products || []);
-      if (active) setAccountWishlist(true);
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => {
+      if (active) setWishlistReady(true);
+    });
     return () => { active = false; };
-  }, [wishlistReady, accountWishlist]);
+  }, [accountWishlist]);
 
   useEffect(() => {
     if (!wishlistReady) return;
@@ -96,6 +101,25 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (prev.some((item) => item.id === product.id)) return prev;
       return [...prev, product];
     });
+  };
+
+  const addToWishlistFromCart = async (product: ProductItem) => {
+    if (!wishlistReady) return { success: false, message: "Your saved pieces are still loading. Please try again." };
+    if (accountWishlist) {
+      try {
+        const response = await fetch("/api/account/wishlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productId: product.id }),
+        });
+        const result = await response.json();
+        if (!response.ok) return { success: false, message: result.message || "Could not save this piece to your wishlist." };
+      } catch {
+        return { success: false, message: "Could not reach your wishlist. Your cart item was kept." };
+      }
+    }
+    setWishlist((previous) => previous.some((item) => item.id === product.id) ? previous : [...previous, product]);
+    return { success: true };
   };
 
   const removeFromWishlist = (productId: string) => {
@@ -126,7 +150,9 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     <WishlistContext.Provider
       value={{
         wishlist,
+        wishlistReady,
         addToWishlist,
+        addToWishlistFromCart,
         removeFromWishlist,
         toggleWishlist,
         isInWishlist,

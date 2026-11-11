@@ -7,7 +7,7 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   if (pathname === "/admin/login") return NextResponse.next();
 
-  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET });
   const isAdminRoute = pathname.startsWith("/admin");
 
   const requestedPath = `${pathname}${request.nextUrl.search}`;

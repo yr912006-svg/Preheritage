@@ -4,6 +4,9 @@ import prisma from "@/lib/prisma";
 import { requireAdminCapability } from "@/lib/account-auth";
 import { ADMIN_API_CAPABILITIES, withAdminCapability } from "@/lib/admin-api-access";
 import { adminAuditStore } from "@/lib/admin-audit";
+import { canAdminCancelOrder, canAdminTransitionOrderStatus } from "@/lib/order-status";
+import { persistOrderStatusTransition } from "@/lib/admin-order-transition";
+import { sendCommittedOrderNotification } from "@/lib/order-notifications";
 
 async function getOrders(_request: Request) {
   try {
@@ -36,19 +39,34 @@ async function updateOrder(request: Request) {
     const trackingId = typeof body?.trackingId === "string" ? body.trackingId.trim().slice(0, 160) : "";
     const allowedStatuses = Object.values(OrderStatus) as string[];
     if (!orderId || !allowedStatuses.includes(status)) return NextResponse.json({ message: "Choose a valid order status." }, { status: 400 });
-    const current = await prisma.order.findUnique({ where: { id: orderId }, select: { id: true, status: true } });
+    if (status === "REFUNDED") return NextResponse.json({ message: "Refunds must be processed and verified through the payment refund workflow." }, { status: 409 });
+    const current = await prisma.order.findUnique({ where: { id: orderId }, select: {
+      id: true, status: true, paymentStatus: true,
+      items: { select: { productId: true, variantId: true, quantity: true } },
+    } });
     if (!current) return NextResponse.json({ message: "Order not found." }, { status: 404 });
+    if (status === "CANCELLED" && !canAdminCancelOrder(current.status, current.paymentStatus)) {
+      const message = current.paymentStatus === "SUCCESS"
+        ? "Paid orders cannot be cancelled here because a verified refund workflow is not available."
+        : `Order cannot move from ${current.status} to ${status} or its payment state is not eligible.`;
+      return NextResponse.json({ message }, { status: 409 });
+    }
+    if (!canAdminTransitionOrderStatus(current.status, status)) {
+      return NextResponse.json({ message: `Order cannot move from ${current.status} to ${status}.` }, { status: 409 });
+    }
     const order = await prisma.$transaction(async (tx) => {
-      const updated = await tx.order.update({ where: { id: orderId }, data: {
+      return persistOrderStatusTransition(tx, { orderId, expectedStatus: current.status,
+        ...(status === "CANCELLED" ? { expectedPaymentStatus: current.paymentStatus, cancellationItems: current.items } : {}),
+        nextStatus: status, updateData: {
         status: status as OrderStatus,
         ...(courierPartner ? { courierPartner } : {}), ...(trackingId ? { trackingId } : {}),
         ...(status === "SHIPPED" && !current.status.includes("SHIPPED") ? { shippedAt: new Date() } : {}),
         ...(status === "DELIVERED" ? { deliveredAt: new Date() } : {}),
         ...(status === "CANCELLED" ? { cancelledAt: new Date() } : {}),
       } });
-      await tx.orderTimeline.create({ data: { orderId, status: status as OrderStatus, title: `Order ${status.toLowerCase().replaceAll("_", " ")}`, description: "Order status updated by PREHERITAGE." } });
-      return updated;
     });
+    if (!order) return NextResponse.json({ message: "Order status changed during this update. Refresh and try again." }, { status: 409 });
+    try { await sendCommittedOrderNotification(prisma, order, status); } catch { /* Keep the committed status transition successful. */ }
     return NextResponse.json({ success: true, order });
   } catch (error) {
     console.error("Admin order update failed:", error);

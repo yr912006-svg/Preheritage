@@ -1,14 +1,30 @@
 import type { Metadata, Viewport } from "next";
+import { Cormorant_Garamond, Plus_Jakarta_Sans } from "next/font/google";
+import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
-import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
-import AnnouncementBar from "@/components/layout/AnnouncementBar";
-import CartDrawer from "@/components/cart/CartDrawer";
-import { CartProvider } from "@/context/CartContext";
-import { WishlistProvider } from "@/context/WishlistContext";
+
+const siteUrl = getSiteUrl();
+
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
+  variable: "--font-cormorant",
+  display: "swap",
+});
+
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-jakarta",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://preheritage.com"),
+  metadataBase: new URL(siteUrl),
+  alternates: {
+    canonical: "./",
+  },
   title: {
     default: "PREHERITAGE | Wear the Stories of India",
     template: "%s | PREHERITAGE",
@@ -38,7 +54,7 @@ export const metadata: Metadata = {
     siteName: "PREHERITAGE",
     images: [
       {
-        url: "https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&q=80&w=1200",
+        url: "/images/og-share.jpg",
         width: 1200,
         height: 630,
         alt: "PREHERITAGE Luxury Indian Fashion",
@@ -49,7 +65,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "PREHERITAGE | Wear the Stories of India",
     description: "Indian Soul. Global Luxury. Timeless Elegance.",
-    images: ["https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&q=80&w=1200"],
+    images: ["/images/og-share.jpg"],
   },
   icons: {
     icon: "/favicon.svg",
@@ -68,18 +84,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen flex flex-col bg-ivory text-charcoal-900 selection:bg-gold-200 selection:text-charcoal-950">
-        <CartProvider>
-          <WishlistProvider>
-            <AnnouncementBar />
-            <Header />
-            <main className="flex-1">{children}</main>
-            <Footer />
-            <CartDrawer />
-          </WishlistProvider>
-        </CartProvider>
-      </body>
+    <html lang="en" className={`${cormorant.variable} ${plusJakarta.variable}`}>
+      <body className="min-h-screen flex flex-col bg-ivory text-charcoal-900 selection:bg-gold-200 selection:text-charcoal-950 font-sans">{children}</body>
     </html>
   );
 }

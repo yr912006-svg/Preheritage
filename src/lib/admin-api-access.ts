@@ -13,6 +13,14 @@ export const ADMIN_API_CAPABILITIES = {
     path: "/api/admin/inventory",
     methods: { GET: "inventory.read", PATCH: "inventory.manage" },
   },
+  coupons: {
+    path: "/api/admin/coupons",
+    methods: { GET: "coupons.manage", POST: "coupons.manage", PATCH: "coupons.manage" },
+  },
+  content: {
+    path: "/api/admin/content",
+    methods: { GET: "content.manage", PATCH: "content.manage" },
+  },
   orders: {
     path: "/api/admin/orders",
     methods: { GET: "orders.read", PATCH: "orders.manage" },
@@ -25,9 +33,21 @@ export const ADMIN_API_CAPABILITIES = {
       DELETE: "inquiries.general.manage",
     },
   },
+  returns: {
+    path: "/api/admin/returns",
+    methods: { GET: "returns.manage", PATCH: "returns.manage" },
+  },
   productImageUpload: {
     path: "/api/storage/upload",
     methods: { POST: "product-images.upload" },
+  },
+  productImagePresign: {
+    path: "/api/storage/presign",
+    methods: { POST: "product-images.upload" },
+  },
+  reviews: {
+    path: "/api/admin/reviews",
+    methods: { GET: "reviews.moderate", PATCH: "reviews.moderate" },
   },
 } as const satisfies Record<string, { path: string; methods: Record<string, AdminCapability> }>;
 

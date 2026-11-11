@@ -16,7 +16,7 @@ const expected = {
     "analytics.sales.read", "orders.read", "orders.manage", "returns.manage", "coupons.manage", "inquiries.order.manage",
   ]),
   CONTENT_MANAGER: new Set([
-    "reviews.moderate", "inquiries.general.manage",
+    "content.manage", "reviews.moderate", "inquiries.general.manage",
   ]),
 };
 

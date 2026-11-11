@@ -7,6 +7,7 @@ import {
   calculateShippingCharge,
   createCartItem,
   mergeCartItem,
+  mergeCartItemLists,
   normalizeCartItems,
   normalizeCheckoutItems,
   removeCartItem,
@@ -66,6 +67,32 @@ test("adding the same variant increments quantity; quantity changes and removal 
   assert.deepEqual(removeCartItem(two, first.id), []);
 });
 
+test("merging guest cart with account cart combines disjoint items and clamps shared items", () => {
+  const itemA = createCartItem(product, "Free Size", "Antique Gold", 1).item;
+  const itemB = { ...itemA, id: "product-2-standard-red", productId: "product-2", quantity: 2, maxStock: 5 };
+  assert.ok(itemA && itemB);
+
+  // When account cart has itemA (qty 1) and guest has itemA (qty 2) + itemB (qty 2)
+  const guestCart = [{ ...itemA, quantity: 2 }, itemB];
+  const accountCart = [itemA];
+
+  const merged = mergeCartItemLists(accountCart, guestCart);
+  assert.equal(merged.length, 2);
+  const foundA = merged.find((item) => item.id === itemA.id);
+  const foundB = merged.find((item) => item.id === itemB.id);
+  assert.equal(foundA?.quantity, 3); // 1 + 2 = 3
+  assert.equal(foundB?.quantity, 2); // new guest item retained
+});
+
+test("merging guest cart with duplicate items collapses them safely", () => {
+  const itemA = createCartItem(product, "Free Size", "Antique Gold", 1).item;
+  assert.ok(itemA);
+  const guestCartWithDupes = [itemA, itemA, { ...itemA, quantity: 2 }];
+  const merged = mergeCartItemLists([], guestCartWithDupes);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].quantity, 4); // 1 + 1 + 2 = 4
+});
+
 test("refresh normalization drops stale zero-quantity and zero-price local entries", () => {
   const valid = createCartItem(product, "Free Size", "Antique Gold", 1).item;
   assert.ok(valid);
@@ -76,6 +103,15 @@ test("refresh normalization drops stale zero-quantity and zero-price local entri
   ]);
   assert.deepEqual(restored.map((item) => item.id), [valid.id]);
   assert.equal(restored[0].quantity, 1);
+});
+
+test("normalizing a refreshed line clamps quantity to the current server stock", () => {
+  const valid = createCartItem(product, "Free Size", "Antique Gold", 1).item;
+  assert.ok(valid);
+  const refreshed = normalizeCartItems([{ ...valid, quantity: 6, maxStock: 2, price: 13999 }]);
+  assert.equal(refreshed[0].quantity, 2);
+  assert.equal(refreshed[0].price, 13999);
+  assert.equal(refreshed[0].maxStock, 2);
 });
 
 test("checkout item validation rejects quantity zero and coalesces duplicate product/variant lines", () => {

@@ -22,12 +22,11 @@ export const Logo: React.FC<LogoProps> = ({
       <div className={`flex items-center ${compactOnMobile ? "gap-1 sm:gap-2" : "gap-2"}`}>
         {/* Emblem: Sacred Weaving Thread & Sun Motif */}
         <svg
-          className={`${compactOnMobile ? "w-6 h-6 sm:w-8 sm:h-8" : "w-7 h-7 sm:w-8 sm:h-8"} transition-transform duration-500 group-hover:rotate-45 ${
-            isLight ? "text-gold-300" : "text-gold-500"
-          }`}
+          className={`${compactOnMobile ? "w-5 h-5 sm:w-8 sm:h-8" : "w-7 h-7 sm:w-8 sm:h-8"} transition-transform duration-500 group-hover:rotate-45 text-[#B08A45]`}
           viewBox="0 0 100 100"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
         >
           {/* Outer Royal Diamond */}
           <rect
@@ -53,7 +52,7 @@ export const Logo: React.FC<LogoProps> = ({
 
         <span
           className={`${compactOnMobile ? "tracking-[0.16em] text-lg sm:tracking-[0.28em] sm:text-2xl" : "tracking-[0.28em] text-xl sm:text-2xl"} font-serif font-bold uppercase transition-colors ${
-            isLight ? "text-white" : "text-charcoal-900 group-hover:text-gold-600"
+            isLight ? "text-[#F8F2E7] group-hover:text-[#B08A45]" : "text-[#24201D] group-hover:text-[#B08A45]"
           }`}
         >
           PREHERITAGE
@@ -62,8 +61,8 @@ export const Logo: React.FC<LogoProps> = ({
 
       {showTagline && (
         <span
-          className={`${compactOnMobile ? "text-[8px] tracking-[0.14em] sm:text-[10px] sm:tracking-[0.25em]" : "text-[9px] sm:text-[10px] tracking-[0.25em]"} uppercase font-sans mt-0.5 font-medium ${
-            isLight ? "text-ivory-300" : "text-charcoal-200"
+          className={`${compactOnMobile ? "text-[9px] tracking-[0.18em] sm:text-[10px] sm:tracking-[0.26em]" : "text-[10px] sm:text-[10.5px] tracking-[0.26em]"} uppercase font-sans mt-0.5 font-medium ${
+            isLight ? "text-[#D0C3AE] group-hover:text-[#F8F2E7]" : "text-[#756A60] group-hover:text-[#24201D]"
           }`}
         >
           Wear the Stories of India

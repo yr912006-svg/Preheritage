@@ -4,11 +4,124 @@ import { verifyRazorpaySignature, razorpayInstance } from "@/lib/razorpay";
 import { randomUUID } from "crypto";
 import { getCustomerUser } from "@/lib/account-auth";
 import { calculateCheckoutTotal, calculateShippingCharge, normalizeCheckoutItems } from "@/lib/cart-model";
-import { validateCouponForOrder } from "@/lib/coupon-service";
+import { createCouponValidator } from "@/lib/coupon-service";
+import { couponUsageLockKeys, customerOrderLockKeys, withCouponUsageLocks } from "@/lib/coupon-checkout";
+import { paymentReplayMatches } from "@/lib/payment-integrity";
+import { CheckoutRecoveryError, createCheckoutRecoveryService } from "@/lib/razorpay-checkout-recovery";
+import { createRazorpayBrowserCallback } from "@/lib/razorpay-browser-callback";
+import { checkoutIdempotencyDisposition, checkoutRequestFingerprint, isCheckoutIdempotencyKey } from "@/lib/checkout-idempotency";
+import { sendCommittedOrderNotification } from "@/lib/order-notifications";
+import { checkoutAvailabilityConflict, checkoutNeedsPriceConfirmation, checkoutProductStockGuard, checkoutVariantStockGuard, createCheckoutConfirmationToken, CheckoutPriceRaceConflict, CheckoutStockConflict } from "@/lib/checkout-confirmation";
+import { sanitizeDbError } from "@/lib/db-resilience";
+
+function isTransientConnectionError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const err = error as { code?: string; name?: string; message?: string };
+
+  if (err.code === "P1000") return false;
+  if (err.name === "PrismaClientValidationError") return false;
+
+  if (err.code && ["P1001", "P1002", "P1008", "P1017", "P2024"].includes(err.code)) {
+    return true;
+  }
+
+  const msg = (err.message || "").toLowerCase();
+
+  if (
+    msg.includes("password authentication failed") ||
+    msg.includes("authentication failed") ||
+    msg.includes("permission denied") ||
+    msg.includes("unauthorized")
+  ) {
+    return false;
+  }
+
+  const transientPatterns = [
+    "kind: closed",
+    "connection closed",
+    "connectionreset",
+    "econnreset",
+    "etimedout",
+    "socket closed",
+    "can't reach database",
+    "timed out fetching a new connection",
+    "forcibly closed by the remote host",
+    "10054",
+  ];
+
+  return transientPatterns.some((pattern) => msg.includes(pattern));
+}
+
+function isTransactionClosedOrTimeoutError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const err = error as { code?: string; name?: string; message?: string };
+
+  if (err.code !== "P2028") return false;
+
+  const msg = (err.message || "").toLowerCase();
+  const patterns = [
+    "transaction already closed",
+    "unable to start a transaction",
+    "transaction not found",
+    "expired transaction",
+    "transaction timed out",
+    "timed out",
+    "connection closed",
+    "connectionreset",
+    "econnreset",
+    "socket closed",
+    "closed by the remote host",
+  ];
+
+  return patterns.some((p) => msg.includes(p));
+}
+
+function isTransactionWriteConflictError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const err = error as { code?: string; name?: string; message?: string };
+
+  if (err.code === "P2034") return true;
+
+  const msg = (err.message || "").toLowerCase();
+  return (
+    msg.includes("write conflict") ||
+    msg.includes("deadlock detected") ||
+    msg.includes("serialization failure") ||
+    msg.includes("could not serialize access")
+  );
+}
+
+async function withTransientRetry<T>(queryFn: () => Promise<T>, label: string, delayMs = 1000): Promise<T> {
+  try {
+    return await queryFn();
+  } catch (error) {
+    if (isTransientConnectionError(error)) {
+      console.warn(
+        `[PREHERITAGE Checkout] Transient connection error during ${label}: ${sanitizeDbError(
+          error
+        )}. Retrying once in ${delayMs}ms...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return await queryFn();
+    }
+    throw error;
+  }
+}
+
+const validateCouponForOrder = createCouponValidator(prisma);
+const checkoutRecovery = createCheckoutRecoveryService({ prisma, validateCouponForOrder });
+const finalizeBrowserPayment = createRazorpayBrowserCallback({
+  prisma,
+  provider: razorpayInstance,
+  paymentSecret: () => process.env.RAZORPAY_KEY_SECRET,
+  markCapturedCheckout: checkoutRecovery.markCapturedCheckout,
+});
 
 export async function POST(req: Request) {
+  let checkoutBody: any = null;
+  let codAttempt: { key: string; fingerprint: string; identity: { userId: string | null; email: string } } | null = null;
   try {
-    const body = await req.json();
+    const body = checkoutBody = await req.json();
     const accountUser = await getCustomerUser();
     const { customer, items, paymentMethod, deliveryMethod, giftMessage, orderNotes, couponCode,
       razorpay_order_id, razorpay_payment_id, razorpay_signature } = body ?? {};
@@ -24,6 +137,27 @@ export async function POST(req: Request) {
     if (paymentMethod !== "COD" && paymentMethod !== "RAZORPAY") {
       return NextResponse.json({ success: false, message: "This payment method is not currently supported." }, { status: 400 });
     }
+    if (paymentMethod === "COD") {
+      const key = body?.checkoutIdempotencyKey;
+      if (!isCheckoutIdempotencyKey(key)) {
+        return NextResponse.json({ success: false, message: "A valid checkout attempt key is required." }, { status: 400 });
+      }
+      const identity = { userId: accountUser?.id ?? null, email: String(customer.email).trim().toLowerCase() };
+      const fingerprint = checkoutRequestFingerprint({
+        customer, items: cart.items, deliveryMethod, giftWrap: Number(body?.giftWrapFee) > 0,
+        couponCode, giftMessage, orderNotes,
+      });
+      codAttempt = { key, fingerprint, identity };
+      const existing = await withTransientRetry(
+        () => prisma.order.findUnique({ where: { checkoutIdempotencyKey: key }, select: {
+          id: true, orderNumber: true, userId: true, guestEmail: true, checkoutRequestFingerprint: true,
+        } }),
+        "checkout-find-idempotency"
+      );
+      const disposition = checkoutIdempotencyDisposition(existing, identity, fingerprint);
+      if (disposition === "replay") return NextResponse.json({ success: true, orderId: existing!.id, orderNumber: existing!.orderNumber, replay: true });
+      if (disposition === "conflict") return NextResponse.json({ success: false, message: "This checkout attempt key was already used for different checkout data." }, { status: 409 });
+    }
     if (paymentMethod === "RAZORPAY") {
       if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature ||
           !process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET === "rzp_test_placeholder_secret" ||
@@ -33,37 +167,60 @@ export async function POST(req: Request) {
       }
     }
 
+    if (paymentMethod === "RAZORPAY") {
+      const callback = await withTransientRetry(
+        () => finalizeBrowserPayment({ accountUser, customer, orderId: razorpay_order_id, paymentId: razorpay_payment_id, signature: razorpay_signature }),
+        "checkout-finalize-razorpay"
+      );
+      return callback instanceof NextResponse ? callback : callback.response;
+    }
+
     const normalizedItems = cart.items;
     const ids = Array.from(new Set(normalizedItems.map((item) => item.productId)));
-    const products = await prisma.product.findMany({ where: { id: { in: ids }, status: "ACTIVE" }, include: { images: { orderBy: { orderIndex: "asc" }, take: 1 }, variants: true } });
+    const products = await withTransientRetry(
+      () => prisma.product.findMany({ where: { id: { in: ids } }, include: { images: { orderBy: { orderIndex: "asc" }, take: 1 }, variants: true } }),
+      "checkout-find-products"
+    );
     const productMap = new Map(products.map((product: any) => [product.id, product]));
-    if (products.length !== ids.length) {
-      return NextResponse.json({ success: false, message: "One or more products are no longer available." }, { status: 409 });
-    }
 
     let subtotal = 0;
     const verifiedItems: any[] = [];
     for (const item of normalizedItems) {
       const product: any = productMap.get(item.productId);
-      if (!product) throw new Error("Product not found");
+      if (!product) return NextResponse.json({ success: false, code: "ITEM_UNAVAILABLE", message: "An item in your bag is no longer available. Remove it and review your bag." }, { status: 409 });
       let variant: any = null;
       if (product.variants.length > 0) {
         variant = item.variantId ? product.variants.find((entry: any) => entry.id === item.variantId) : null;
-        if (!variant || variant.stock < item.quantity) {
-          return NextResponse.json({ success: false, message: `The selected option for ${product.title} is unavailable or out of stock.` }, { status: 409 });
-        }
-      } else if (item.variantId) {
-        return NextResponse.json({ success: false, message: `The selected option for ${product.title} is no longer available.` }, { status: 409 });
-      } else if (product.stock < item.quantity) {
-        return NextResponse.json({ success: false, message: `Insufficient stock for ${product.title}.` }, { status: 409 });
       }
+      const availabilityConflict = checkoutAvailabilityConflict({
+        title: product.title,
+        productActive: product.status === "ACTIVE",
+        hasVariants: product.variants.length > 0 || Boolean(item.variantId),
+        selectedVariantExists: product.variants.length > 0 ? Boolean(variant) : !item.variantId,
+        availableStock: variant?.stock ?? product.stock,
+        requestedQuantity: item.quantity,
+      });
+      if (availabilityConflict) return NextResponse.json({ success: false, ...availabilityConflict }, { status: 409 });
       const price = Number(product.price) + Number(variant?.additionalPrice ?? 0);
       if (!Number.isFinite(price) || price <= 0) return NextResponse.json({ success: false, message: `The price for ${product.title} could not be verified.` }, { status: 409 });
       subtotal += price * item.quantity;
-      verifiedItems.push({ product, variant, quantity: item.quantity, price });
+      const inputItem = Array.isArray(body?.items)
+        ? body.items.find((entry: any) => (entry?.productId === item.productId || entry?.id === item.productId) && (entry?.variantId || null) === (item.variantId || null))
+        : null;
+      const requestedImage = typeof inputItem?.image === "string" && inputItem.image.trim() ? inputItem.image.trim() : null;
+      verifiedItems.push({
+        product,
+        variant,
+        quantity: item.quantity,
+        price,
+        image: requestedImage ?? product.images?.[0]?.url ?? null,
+      });
     }
 
-    const couponResult = await validateCouponForOrder({ code: couponCode, subtotal, email: String(customer.email), userId: accountUser?.id });
+    const couponResult = await withTransientRetry(
+      () => validateCouponForOrder({ code: couponCode, subtotal, email: String(customer.email), userId: accountUser?.id }),
+      "checkout-validate-coupon"
+    );
     if (!couponResult.valid) return NextResponse.json({ success: false, message: couponResult.message }, { status: 400 });
 
     // Fees and discounts are recalculated from current database prices and coupon rules.
@@ -75,31 +232,81 @@ export async function POST(req: Request) {
     if (paymentMethod === "COD" && totalAmount > 25000) {
       return NextResponse.json({ success: false, message: "Cash on Delivery is limited to orders up to ₹25,000." }, { status: 400 });
     }
-    if (paymentMethod === "RAZORPAY") {
-      // Confirm with Razorpay itself that the signed payment belongs to this order and exact server total.
-      const [gatewayOrder, gatewayPayment] = await Promise.all([
-        razorpayInstance.orders.fetch(razorpay_order_id),
-        razorpayInstance.payments.fetch(razorpay_payment_id),
-      ]);
-      if (gatewayOrder.id !== razorpay_order_id || gatewayPayment.order_id !== razorpay_order_id ||
-          gatewayPayment.status !== "captured" || Number(gatewayOrder.amount) !== Math.round(totalAmount * 100) ||
-          Number(gatewayPayment.amount) !== Math.round(totalAmount * 100) || gatewayOrder.currency !== "INR" || gatewayPayment.currency !== "INR") {
-        return NextResponse.json({ success: false, message: "Payment amount or status does not match this order." }, { status: 400 });
-      }
+    const currentPricing = {
+      items: verifiedItems.map((item) => ({ productId: item.product.id, variantId: item.variant?.id ?? null, title: item.product.title, quantity: item.quantity, price: item.price })),
+      subtotal, discountAmount, shippingCharge, giftWrapCharge, codFee, totalAmount,
+    };
+    const confirmationContext = {
+      couponCode, deliveryMethod,
+      customerIdentity: JSON.stringify({
+        userId: accountUser?.id ?? null,
+        email: String(customer.email).trim().toLowerCase(),
+        fullName: String(customer.fullName).trim(),
+        phone: String(customer.phone).trim(),
+        houseFlat: String(customer.houseFlat).trim(),
+        area: String(customer.area).trim(),
+        landmark: String(customer.landmark ?? "").trim(),
+        city: String(customer.city).trim(),
+        state: String(customer.state).trim(),
+        pincode: String(customer.pincode).trim(),
+        country: String(customer.country ?? "India").trim(),
+      }),
+      checkoutIdempotencyKey: codAttempt?.key ?? "",
+    };
+    if (paymentMethod === "COD" && checkoutNeedsPriceConfirmation({
+      expected: {
+        items: Array.isArray(body?.items) ? body.items : undefined,
+        subtotal: body?.subtotal,
+        discountAmount: body?.discountAmount,
+        shippingCharge: body?.shippingFee,
+        giftWrapCharge: body?.giftWrapFee > 0 ? 199 : 0,
+        codFee: body?.codFee,
+        totalAmount: body?.grandTotal,
+      },
+      confirmationToken: body?.confirmedPricingToken,
+      current: currentPricing,
+      context: confirmationContext,
+      secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "",
+    })) {
+      const confirmationSecret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+      if (!confirmationSecret) return NextResponse.json({ success: false, message: "Checkout cannot verify the updated order total right now. Please try again later." }, { status: 503 });
+      const confirmationToken = createCheckoutConfirmationToken({ pricing: currentPricing, context: confirmationContext, secret: confirmationSecret });
+      return NextResponse.json({ success: false, code: "PRICE_CHANGED", message: "Prices or order charges changed. Review the updated summary and confirm to continue.", pricing: currentPricing, confirmationToken }, { status: 409 });
     }
-
     const safeOrderNumber = `PRE-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`;
 
-    const order = await prisma.$transaction(async (tx: any) => {
-      if (paymentMethod === "RAZORPAY") {
-        const existingPayment = await tx.payment.findFirst({ where: { razorpayPaymentId: razorpay_payment_id } });
-        if (existingPayment) throw new Error("This payment has already been used for an order.");
-      }
+    const executeOrderTransaction = async (tx: any) => {
+      const identityFilter = [
+        ...(accountUser?.id ? [{ userId: accountUser.id }] : []),
+        ...(String(customer.email).trim() ? [{ guestEmail: String(customer.email).trim().toLowerCase() }] : []),
+      ];
+      const orderLocks = customerOrderLockKeys({ userId: accountUser?.id, email: String(customer.email) });
+      const couponLocks = couponResult.coupon
+        ? couponUsageLockKeys({ couponCode: couponResult.coupon.code, userId: accountUser?.id, email: String(customer.email) })
+        : [];
+      await withCouponUsageLocks(
+        [...orderLocks, ...couponLocks],
+        async (key) => { await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0)) IS NULL AS locked`; },
+        async () => {
+          if (!couponResult.coupon || !identityFilter.length) return;
+          const [priorCouponCount, priorOrderCount] = await Promise.all([
+            tx.order.count({ where: { couponCode: couponResult.coupon.code, OR: identityFilter } }),
+            couponResult.coupon.firstOrderOnly ? tx.order.count({ where: { OR: identityFilter } }) : Promise.resolve(0),
+          ]);
+          if (couponResult.coupon.usagePerUser > 0 && priorCouponCount >= couponResult.coupon.usagePerUser) {
+            throw new Error("COUPON_CUSTOMER_LIMIT");
+          }
+          if (couponResult.coupon.firstOrderOnly && priorOrderCount > 0) throw new Error("COUPON_FIRST_ORDER_ONLY");
+        },
+      );
       if (couponResult.coupon) {
+        const now = new Date();
         const couponUpdate = await tx.coupon.updateMany({
           where: {
             id: couponResult.coupon.id,
             isActive: true,
+            startDate: { lte: now },
+            endDate: { gte: now },
             ...(couponResult.coupon.usageLimit !== null ? { usedCount: { lt: couponResult.coupon.usageLimit } } : {}),
           },
           data: { usedCount: { increment: 1 } },
@@ -108,16 +315,37 @@ export async function POST(req: Request) {
       }
       for (const item of verifiedItems) {
         if (item.variant) {
-          const update = await tx.productVariant.updateMany({ where: { id: item.variant.id, stock: { gte: item.quantity } }, data: { stock: { decrement: item.quantity } } });
-          if (update.count !== 1) throw new Error(`Stock changed for ${item.product.title}; please retry.`);
+          const update = await tx.productVariant.updateMany({
+            where: {
+              ...checkoutVariantStockGuard({
+                variantId: item.variant.id, additionalPrice: item.variant.additionalPrice,
+                productPrice: item.product.price, quantity: item.quantity,
+              }),
+            },
+            data: { stock: { decrement: item.quantity } },
+          });
+          if (update.count !== 1) {
+            const latest = await tx.product.findUnique({ where: { id: item.product.id }, select: { status: true, price: true } });
+            const latestVariant = await tx.productVariant.findUnique({ where: { id: item.variant.id }, select: { additionalPrice: true } });
+            if (latest && (Number(latest.price) !== Number(item.product.price) || (latestVariant && Number(latestVariant.additionalPrice) !== Number(item.variant.additionalPrice)))) throw new CheckoutPriceRaceConflict();
+            throw new CheckoutStockConflict(`The selected option for ${item.product.title} is no longer available or just sold out. Update your bag and try again.`);
+          }
         } else {
-          const update = await tx.product.updateMany({ where: { id: item.product.id, stock: { gte: item.quantity } }, data: { stock: { decrement: item.quantity } } });
-          if (update.count !== 1) throw new Error(`Stock changed for ${item.product.title}; please retry.`);
+          const update = await tx.product.updateMany({
+            where: checkoutProductStockGuard({ productId: item.product.id, price: item.product.price, quantity: item.quantity }),
+            data: { stock: { decrement: item.quantity } },
+          });
+          if (update.count !== 1) {
+            const latest = await tx.product.findUnique({ where: { id: item.product.id }, select: { status: true, price: true } });
+            if (latest && Number(latest.price) !== Number(item.product.price)) throw new CheckoutPriceRaceConflict();
+            throw new CheckoutStockConflict(`${item.product.title} is no longer available or just sold out. Update your bag and try again.`);
+          }
         }
       }
       return tx.order.create({
         data: {
           orderNumber: safeOrderNumber,
+          ...(codAttempt ? { checkoutIdempotencyKey: codAttempt.key, checkoutRequestFingerprint: codAttempt.fingerprint } : {}),
           userId: accountUser?.id ?? null,
           guestEmail: String(customer.email).trim().toLowerCase(),
           guestPhone: String(customer.phone).trim(),
@@ -132,7 +360,7 @@ export async function POST(req: Request) {
             title: item.product.title, sku: item.variant?.sku ?? item.product.sku,
             size: item.variant?.size ?? null, color: item.variant?.color ?? null,
             price: item.price, quantity: item.quantity, totalPrice: item.price * item.quantity,
-            image: item.product.images?.[0]?.url ?? null,
+            image: item.image ?? item.product.images?.[0]?.url ?? null,
           })) },
           timeline: { create: { status: "PLACED", title: "Order Placed", description: "Order placed with PREHERITAGE." } },
           ...(paymentMethod === "RAZORPAY" ? { payment: { create: {
@@ -142,11 +370,184 @@ export async function POST(req: Request) {
           } } } : { payment: { create: { method: "COD", status: "PENDING", amount: totalAmount, currency: "INR" } } }),
         },
       });
-    });
+    };
 
+    let order: any;
+    try {
+      order = await prisma.$transaction(executeOrderTransaction, {
+        maxWait: 15000,
+        timeout: 25000,
+      });
+    } catch (txError: any) {
+      const isConnError = isTransientConnectionError(txError);
+      const isTxClosedOrTimeout = isTransactionClosedOrTimeoutError(txError);
+      const isWriteConflict = isTransactionWriteConflictError(txError);
+
+      if (!isConnError && !isTxClosedOrTimeout && !isWriteConflict) {
+        // Non-transient application/validation/business logic error — never retry
+        throw txError;
+      }
+
+      // Distinguish ambiguous failures (connection/timeout/closed) from explicit write conflicts
+      const isAmbiguous = isConnError || isTxClosedOrTimeout;
+
+      if (isAmbiguous) {
+        console.warn(
+          `[PREHERITAGE Checkout] Ambiguous transaction failure (${
+            isTxClosedOrTimeout ? "P2028 closed/timeout" : "transient connection"
+          }): ${sanitizeDbError(txError)}. Checking outcome before retry...`
+        );
+      } else {
+        console.warn(
+          `[PREHERITAGE Checkout] Transaction write conflict / deadlock (P2034): ${sanitizeDbError(
+            txError
+          )}. Checking outcome before retry...`
+        );
+      }
+
+      // Check if the order was already committed despite failure
+      if (codAttempt) {
+        let committedCheckFailed = false;
+        let committed: any = null;
+        try {
+          committed = await prisma.order.findUnique({
+            where: { checkoutIdempotencyKey: codAttempt.key },
+            select: { id: true, orderNumber: true, userId: true, guestEmail: true, checkoutRequestFingerprint: true },
+          });
+        } catch (checkErr) {
+          committedCheckFailed = true;
+          console.error(`[PREHERITAGE Checkout] Idempotency lookup failed: ${sanitizeDbError(checkErr)}`);
+        }
+
+        // Gate 11.12.8: If idempotency lookup failed (connection error, P2028, or P2034),
+        // transaction outcome cannot be safely determined. Unconditionally abort to prevent duplicate orders.
+        if (committedCheckFailed) {
+          console.error(
+            "[PREHERITAGE Checkout] Cannot safely determine transaction outcome. Aborting retry to prevent duplicate order."
+          );
+          throw new Error("Checkout outcome could not be verified. Please check your order history or try again.");
+        }
+
+        if (committed) {
+          const disposition = checkoutIdempotencyDisposition(committed, codAttempt.identity, codAttempt.fingerprint);
+          if (disposition === "replay") {
+            return NextResponse.json({ success: true, orderId: committed.id, orderNumber: committed.orderNumber, replay: true });
+          }
+          if (disposition === "conflict") {
+            return NextResponse.json({ success: false, message: "This checkout attempt key was already used for different checkout data." }, { status: 409 });
+          }
+        }
+      }
+
+      // Wait appropriate backoff: 1000ms for connection recovery, 250ms for write conflict
+      const backoffMs = isAmbiguous ? 1000 : 250;
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+
+      // For ambiguous failures, re-check outcome after backoff
+      if (isAmbiguous && codAttempt) {
+        let secondCheckFailed = false;
+        let committed: any = null;
+        try {
+          committed = await prisma.order.findUnique({
+            where: { checkoutIdempotencyKey: codAttempt.key },
+            select: { id: true, orderNumber: true, userId: true, guestEmail: true, checkoutRequestFingerprint: true },
+          });
+        } catch (checkErr) {
+          secondCheckFailed = true;
+          console.error(`[PREHERITAGE Checkout] Post-backoff idempotency lookup failed: ${sanitizeDbError(checkErr)}`);
+        }
+
+        if (secondCheckFailed) {
+          console.error(
+            "[PREHERITAGE Checkout] Cannot safely determine transaction outcome on post-backoff check. Aborting retry."
+          );
+          throw new Error("Checkout outcome could not be verified. Please check your order history or try again.");
+        }
+
+        if (committed) {
+          const disposition = checkoutIdempotencyDisposition(committed, codAttempt.identity, codAttempt.fingerprint);
+          if (disposition === "replay") {
+            return NextResponse.json({ success: true, orderId: committed.id, orderNumber: committed.orderNumber, replay: true });
+          }
+          if (disposition === "conflict") {
+            return NextResponse.json({ success: false, message: "This checkout attempt key was already used for different checkout data." }, { status: 409 });
+          }
+        }
+      }
+
+      // Safe to retry: retry the transaction exactly once in a protected block
+      try {
+        order = await prisma.$transaction(executeOrderTransaction, {
+          maxWait: 15000,
+          timeout: 25000,
+        });
+      } catch (retryTxError: any) {
+        console.error(
+          `[PREHERITAGE Checkout] Secondary transaction failure during retry: ${sanitizeDbError(retryTxError)}`
+        );
+        // Check outcome once more if connection dropped during commit of retry
+        if (codAttempt) {
+          try {
+            const committed = await prisma.order.findUnique({
+              where: { checkoutIdempotencyKey: codAttempt.key },
+              select: { id: true, orderNumber: true, userId: true, guestEmail: true, checkoutRequestFingerprint: true },
+            });
+            if (committed) {
+              const disposition = checkoutIdempotencyDisposition(committed, codAttempt.identity, codAttempt.fingerprint);
+              if (disposition === "replay") {
+                return NextResponse.json({ success: true, orderId: committed.id, orderNumber: committed.orderNumber, replay: true });
+              }
+            }
+          } catch {
+            // Cannot verify; proceed to throw retryTxError
+          }
+        }
+        throw retryTxError;
+      }
+    }
+
+    if (paymentMethod === "COD") {
+      try { await sendCommittedOrderNotification(prisma, order, "PLACED"); } catch { /* Email cannot change a committed order. */ }
+    }
     return NextResponse.json({ success: true, orderId: order.id, orderNumber: order.orderNumber });
   } catch (error: any) {
     console.error("Checkout order error:", error);
-    return NextResponse.json({ success: false, message: error?.message || "Order could not be saved. Please try again." }, { status: error?.message?.includes("coupon") ? 409 : 500 });
+    if (error instanceof CheckoutRecoveryError) {
+      return NextResponse.json({ success: false, message: error.message, recoveryRequired: true }, { status: 409 });
+    }
+    if (error instanceof CheckoutStockConflict) {
+      return NextResponse.json({ success: false, code: "STOCK_CONFLICT", message: error.message }, { status: 409 });
+    }
+    if (error instanceof CheckoutPriceRaceConflict) {
+      return NextResponse.json({ success: false, code: "PRICE_CHANGED", message: error.message }, { status: 409 });
+    }
+    if (error?.code === "P2002") {
+      if (codAttempt) {
+        const existing = await prisma.order.findUnique({ where: { checkoutIdempotencyKey: codAttempt.key }, select: {
+          id: true, orderNumber: true, userId: true, guestEmail: true, checkoutRequestFingerprint: true,
+        } });
+        const disposition = checkoutIdempotencyDisposition(existing, codAttempt.identity, codAttempt.fingerprint);
+        if (disposition === "replay") return NextResponse.json({ success: true, orderId: existing!.id, orderNumber: existing!.orderNumber, replay: true });
+        if (disposition === "conflict") return NextResponse.json({ success: false, message: "This checkout attempt key was already used for different checkout data." }, { status: 409 });
+      }
+      const paymentId = checkoutBody?.razorpay_payment_id;
+      const gatewayOrderId = checkoutBody?.razorpay_order_id;
+      if (typeof paymentId === "string" && typeof gatewayOrderId === "string") {
+        const prior = await prisma.payment.findFirst({
+          where: { OR: [{ razorpayPaymentId: paymentId }, { razorpayOrderId: gatewayOrderId }] },
+          include: { order: { select: { id: true, orderNumber: true } } },
+        }).catch(() => null);
+        if (prior && paymentReplayMatches(prior, { orderId: gatewayOrderId, paymentId }) === "same") {
+          return NextResponse.json({ success: true, orderId: prior.order.id, orderNumber: prior.order.orderNumber, replay: true });
+        }
+      }
+      return NextResponse.json({ success: false, message: "This payment is already linked to an order." }, { status: 409 });
+    }
+    const message = typeof error?.message === "string" && error.message.startsWith("COUPON_")
+      ? "This coupon has already been used or is no longer eligible for this customer."
+      : error?.message === "Checkout outcome could not be verified. Please check your order history or try again."
+      ? error.message
+      : "Order could not be saved. Please try again.";
+    return NextResponse.json({ success: false, message }, { status: error?.message?.startsWith("COUPON_") ? 409 : 500 });
   }
 }

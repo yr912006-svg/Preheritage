@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getCustomerUser } from "@/lib/account-auth";
+import { toOrderTrackingItems } from "@/lib/order-tracking";
 
 export async function POST(request: Request) {
   try {
@@ -14,12 +15,12 @@ export async function POST(request: Request) {
       select: {
         id: true, orderNumber: true, status: true, totalAmount: true, paymentMethod: true, paymentStatus: true,
         courierPartner: true, trackingId: true, trackingUrl: true, createdAt: true,
-        items: { select: { title: true, size: true, color: true, quantity: true } },
+        items: { select: { title: true, size: true, color: true, price: true, quantity: true } },
         timeline: { orderBy: { createdAt: "asc" }, select: { status: true, title: true, description: true, createdAt: true } },
       },
     });
     if (!order) return NextResponse.json({ message: "We could not find an order matching those details." }, { status: 404 });
-    return NextResponse.json({ order });
+    return NextResponse.json({ order: { ...order, items: toOrderTrackingItems(order.items) } });
   } catch (error) {
     console.error("Order lookup failed:", error);
     return NextResponse.json({ message: "Order details are temporarily unavailable." }, { status: 503 });

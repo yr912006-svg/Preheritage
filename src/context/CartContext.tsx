@@ -1,35 +1,38 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { ProductItem } from "@/lib/sample-data";
+import { persistCartQuantityUpdate } from "@/lib/cart-quantity-sync";
 import {
   calculateCartSubtotal,
   calculateCheckoutTotal,
-  calculateCouponDiscount,
   calculateShippingCharge,
   createCartItem,
   mergeCartItem,
+  mergeCartItemLists,
   normalizeCartItems,
-  normalizeCartCoupon,
   removeCartItem,
   setCartItemQuantity,
-  type CartCoupon,
+  updateCartItemImage as updateCartItemImageModel,
   type CartItem,
 } from "@/lib/cart-model";
+
+type AppliedCartCoupon = { code: string; discountAmount: number; freeShipping: boolean; subtotal: number };
 
 interface CartContextType {
   cart: CartItem[];
   savedForLater: CartItem[];
-  addToCart: (product: ProductItem, size?: string, color?: string, quantity?: number) => { success: boolean; message?: string };
+  addToCart: (product: ProductItem, size?: string, color?: string, quantity?: number, image?: string) => { success: boolean; message?: string };
   removeFromCart: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
+  updateCartItemImage: (itemId: string, image: string) => void;
   saveForLater: (itemId: string) => void;
   moveToCart: (itemId: string) => void;
   clearCart: () => void;
   isCartOpen: boolean;
   setIsCartOpen: (open: boolean) => void;
-  appliedCoupon: CartCoupon | null;
-  applyCoupon: (code: string) => { success: boolean; message: string };
+  appliedCoupon: AppliedCartCoupon | null;
+  applyCoupon: (code: string, email: string) => Promise<{ success: boolean; message: string }>;
   removeCoupon: () => void;
   subtotal: number;
   discountAmount: number;
@@ -39,6 +42,7 @@ interface CartContextType {
   freeShippingThreshold: number;
   freeShippingRemaining: number;
   totalItemsCount: number;
+  cartSyncError: string;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -49,9 +53,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [cart, setCart] = useState<CartItem[]>([]);
   const [savedForLater, setSavedForLater] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [appliedCoupon, setAppliedCoupon] = useState<CartCoupon | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCartCoupon | null>(null);
+  const currentCartKey = JSON.stringify(cart.map((item) => ({ productId: item.productId, variantId: item.variantId ?? null, quantity: item.quantity })));
+  const currentCartKeyRef = useRef(currentCartKey);
+  currentCartKeyRef.current = currentCartKey;
   const [storageReady, setStorageReady] = useState(false);
   const [accountCart, setAccountCart] = useState(false);
+  const [cartSyncError, setCartSyncError] = useState("");
+  const quantityUpdatesInFlight = useRef(new Set<string>());
+  const pendingGuestItemsRef = useRef<CartItem[]>([]);
 
   const syncAccountCart = (init?: RequestInit) => {
     void fetch("/api/account/cart", init)
@@ -68,16 +78,19 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const savedCart = localStorage.getItem("preheritage_cart");
         const savedLater = localStorage.getItem("preheritage_saved_later");
-        const coupon = localStorage.getItem("preheritage_coupon");
-        setCart(normalizeCartItems(savedCart ? JSON.parse(savedCart) : []));
+        const items = normalizeCartItems(savedCart ? JSON.parse(savedCart) : []);
+        pendingGuestItemsRef.current = items;
+        setCart((prev) => (prev.length > 0 ? prev : items));
         setSavedForLater(normalizeCartItems(savedLater ? JSON.parse(savedLater) : []));
-        setAppliedCoupon(normalizeCartCoupon(coupon ? JSON.parse(coupon) : null));
-      } catch {
-        setCart([]);
-        setSavedForLater([]);
+        localStorage.removeItem("preheritage_coupon");
         setAppliedCoupon(null);
+      } catch {
+        // preserve current state on storage error
       }
     };
+
+    // Restore immediately on mount so items are available without waiting for network
+    restoreGuestCart();
 
     void fetch("/api/auth/session", { cache: "no-store" }).then(async (response) => {
       const session = response.ok ? await response.json() : null;
@@ -85,10 +98,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const user = session?.user as { id?: string; role?: string } | undefined;
       const isCustomer = Boolean(user?.id && user.role === "CUSTOMER");
       setAccountCart(isCustomer);
-      setCart([]);
-      setSavedForLater([]);
-      setAppliedCoupon(null);
-      if (!isCustomer) restoreGuestCart();
+      if (isCustomer) {
+        setCart([]);
+        setSavedForLater([]);
+        setAppliedCoupon(null);
+      } else {
+        restoreGuestCart();
+      }
       setStorageReady(true);
     }).catch(() => {
       if (!active) return;
@@ -107,10 +123,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const savedCart = localStorage.getItem("preheritage_cart");
           const savedLater = localStorage.getItem("preheritage_saved_later");
-          const coupon = localStorage.getItem("preheritage_coupon");
           setCart(normalizeCartItems(savedCart ? JSON.parse(savedCart) : []));
           setSavedForLater(normalizeCartItems(savedLater ? JSON.parse(savedLater) : []));
-          setAppliedCoupon(normalizeCartCoupon(coupon ? JSON.parse(coupon) : null));
+          localStorage.removeItem("preheritage_coupon");
+          setAppliedCoupon(null);
         } catch {
           setCart([]);
           setSavedForLater([]);
@@ -138,9 +154,57 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           maxStock: item.maxStock,
         })));
 
-        // Keep items already restored from this browser while merging the
-        // account cart. Prefer the greater quantity for matching variants.
-        setCart(accountItems);
+        const guestItems = pendingGuestItemsRef.current;
+        if (guestItems.length > 0) {
+          pendingGuestItemsRef.current = [];
+          const optimisticMerged = mergeCartItemLists(accountItems, guestItems);
+          setCart(optimisticMerged);
+
+          void fetch("/api/account/cart", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "merge",
+              items: guestItems.map((item) => ({
+                productId: item.productId,
+                variantId: item.variantId || null,
+                quantity: item.quantity,
+              })),
+            }),
+          })
+            .then(async (mergeRes) => {
+              if (!active) return;
+              if (mergeRes.ok) {
+                try {
+                  localStorage.removeItem("preheritage_cart");
+                  localStorage.removeItem("preheritage_saved_later");
+                } catch {
+                  // ignore
+                }
+                const mergeData = await mergeRes.json();
+                if (mergeData?.items) {
+                  const serverItems = normalizeCartItems(mergeData.items.map((item: any) => ({
+                    id: `${item.productId}-${item.size}-${item.color}`,
+                    productId: item.productId,
+                    variantId: item.variantId || undefined,
+                    title: item.product.title,
+                    slug: item.product.slug,
+                    price: item.price,
+                    mrp: item.product.mrp,
+                    image: item.product.images[0] || "",
+                    size: item.size,
+                    color: item.color,
+                    quantity: item.quantity,
+                    maxStock: item.maxStock,
+                  })));
+                  setCart(serverItems);
+                }
+              }
+            })
+            .catch(() => undefined);
+        } else {
+          setCart(accountItems);
+        }
       }
       setAccountCart(true);
     }).catch(() => undefined);
@@ -154,41 +218,61 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (accountCart) return;
       localStorage.setItem("preheritage_cart", JSON.stringify(cart));
       localStorage.setItem("preheritage_saved_later", JSON.stringify(savedForLater));
-      if (appliedCoupon) {
-        localStorage.setItem("preheritage_coupon", JSON.stringify(appliedCoupon));
-      } else {
-        localStorage.removeItem("preheritage_coupon");
-      }
+      localStorage.removeItem("preheritage_coupon");
     } catch (e) {
       console.error("Failed to save cart to storage", e);
     }
-  }, [cart, savedForLater, appliedCoupon, storageReady, accountCart]);
+  }, [cart, savedForLater, storageReady, accountCart]);
 
   const addToCart = (
     product: ProductItem,
     size?: string,
     color?: string,
-    quantity = 1
+    quantity = 1,
+    image?: string
   ) => {
-    const created = createCartItem(product, size, color, quantity);
+    const created = createCartItem(product, size, color, quantity, image);
     if (!created.item) return { success: false, message: created.message || "This item could not be added." };
     const existing = normalizeCartItems(cart).find((item) => item.id === created.item?.id);
     const acceptedQuantity = Math.min(created.item.quantity, created.item.maxStock - (existing?.quantity || 0));
     if (acceptedQuantity < 1) return { success: false, message: "You have reached the available quantity for this selection." };
     const item = { ...created.item, quantity: acceptedQuantity };
-    setCart((previous) => mergeCartItem(previous, item));
+    setAppliedCoupon(null);
+    setCart((previous) => {
+      const nextCart = mergeCartItem(previous, item);
+      try {
+        if (!accountCart) {
+          localStorage.setItem("preheritage_cart", JSON.stringify(nextCart));
+        }
+      } catch { /* storage fallback */ }
+      return nextCart;
+    });
     if (accountCart) syncAccountCart({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: item.productId, variantId: item.variantId, quantity: acceptedQuantity }) });
     setIsCartOpen(true);
     return { success: true };
   };
 
+  const updateCartItemImage = (itemId: string, image: string) => {
+    if (!image) return;
+    setCart((previous) => {
+      const nextCart = updateCartItemImageModel(previous, itemId, image);
+      try {
+        if (!accountCart) {
+          localStorage.setItem("preheritage_cart", JSON.stringify(nextCart));
+        }
+      } catch { /* storage fallback */ }
+      return nextCart;
+    });
+  };
+
   const removeFromCart = (itemId: string) => {
     const removed = cart.find((item) => item.id === itemId);
     if (accountCart && removed) syncAccountCart({ method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: removed.productId, variantId: removed.variantId }) });
+    setAppliedCoupon(null);
     setCart((prev) => removeCartItem(prev, itemId));
   };
 
-  const updateQuantity = (itemId: string, quantity: number) => {
+  const updateQuantity = async (itemId: string, quantity: number) => {
     if (!Number.isInteger(quantity)) return;
     if (quantity <= 0) {
       removeFromCart(itemId);
@@ -197,7 +281,27 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const changed = cart.find((item) => item.id === itemId);
     if (!changed || changed.maxStock < 1) return;
     const nextQuantity = Math.min(quantity, changed.maxStock, 20);
-    if (accountCart) syncAccountCart({ method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: changed.productId, variantId: changed.variantId, quantity: nextQuantity }) });
+    if (accountCart) {
+      if (quantityUpdatesInFlight.current.has(itemId)) return;
+      quantityUpdatesInFlight.current.add(itemId);
+      const result = await persistCartQuantityUpdate(nextQuantity, async () => {
+        const response = await fetch("/api/account/cart", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: changed.productId, variantId: changed.variantId, quantity: nextQuantity }) });
+        const data: unknown = await response.json().catch(() => null);
+        const message = data && typeof data === "object" && "message" in data && typeof data.message === "string" ? data.message : undefined;
+        return { ok: response.ok, message };
+      });
+      quantityUpdatesInFlight.current.delete(itemId);
+      if (result.success === false) {
+        setCartSyncError(result.message);
+        return;
+      }
+      setCartSyncError("");
+      setAppliedCoupon(null);
+      setCart((prev) => setCartItemQuantity(prev, itemId, nextQuantity));
+      return;
+    }
+    setCartSyncError("");
+    setAppliedCoupon(null);
     setCart((prev) => setCartItemQuantity(prev, itemId, nextQuantity));
   };
 
@@ -205,6 +309,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const item = cart.find((i) => i.id === itemId);
     if (!item) return;
     if (accountCart) syncAccountCart({ method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: item.productId, variantId: item.variantId }) });
+    setAppliedCoupon(null);
     setCart((prev) => prev.filter((i) => i.id !== itemId));
     setSavedForLater((prev) => [...prev, item]);
   };
@@ -218,6 +323,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const acceptedQuantity = Math.min(safeItem.quantity, safeItem.maxStock - (existing?.quantity || 0));
     if (acceptedQuantity < 1) return;
     const movingItem = { ...safeItem, quantity: acceptedQuantity };
+    setAppliedCoupon(null);
     setSavedForLater((prev) => prev.filter((entry) => entry.id !== itemId));
     setCart((prev) => mergeCartItem(prev, movingItem));
     if (accountCart) syncAccountCart({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: movingItem.productId, variantId: movingItem.variantId, quantity: acceptedQuantity }) });
@@ -229,37 +335,41 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAppliedCoupon(null);
   };
 
-  const applyCoupon = (code: string) => {
-    const upper = code.trim().toUpperCase();
-    if (upper === "HERITAGE10") {
-      if (subtotal < 4999) return { success: false, message: "HERITAGE10 requires a minimum order of ₹4,999." };
-      setAppliedCoupon({ code: upper, discount: 10, type: "PERCENT", minimumOrderValue: 4999, maxDiscount: 5000 });
-      return { success: true, message: "10% Royal Heritage discount applied!" };
-    }
-    if (upper === "ROYAL2000") {
-      if (subtotal < 19999) {
-        return { success: false, message: "ROYAL2000 requires minimum order value of ₹19,999" };
+  const applyCoupon = async (code: string, email: string) => {
+    const items = cart.map((item) => ({ productId: item.productId, variantId: item.variantId ?? null, quantity: item.quantity }));
+    if (!items.length) return { success: false, message: "Add an item to your bag before applying a coupon." };
+    const requestedCartKey = JSON.stringify(items);
+    try {
+      const response = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, email, items }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.valid) return { success: false, message: result.message || "This coupon could not be applied." };
+      if (currentCartKeyRef.current !== requestedCartKey) {
+        return { success: false, message: "Your bag changed while we checked the coupon. Please apply it again." };
       }
-      setAppliedCoupon({ code: upper, discount: 2000, type: "FIXED" });
-      return { success: true, message: "₹2,000 royal discount applied!" };
+      if (Math.round(Number(result.subtotal) * 100) !== Math.round(calculateCartSubtotal(cart) * 100)) {
+        return { success: false, message: "Current product prices differ from your bag. Refresh your bag before applying this coupon." };
+      }
+      setAppliedCoupon({ code: result.code, discountAmount: result.discountAmount, freeShipping: result.freeShipping, subtotal: result.subtotal });
+      const discountText = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(result.discountAmount);
+      return { success: true, message: result.freeShipping ? `${result.code} applied with free shipping.` : `${result.code} applied. ${discountText} discount.` };
+    } catch {
+      return { success: false, message: "Coupon eligibility is temporarily unavailable. Please try again." };
     }
-    if (upper === "FIRSTWEAR") {
-      if (subtotal < 2999) return { success: false, message: "FIRSTWEAR requires a minimum order of ₹2,999." };
-      setAppliedCoupon({ code: upper, discount: 15, type: "PERCENT", minimumOrderValue: 2999 });
-      return { success: true, message: "15% welcome discount applied!" };
-    }
-    return { success: false, message: "Invalid coupon code. Try HERITAGE10 or FIRSTWEAR" };
   };
-
   const removeCoupon = () => {
     setAppliedCoupon(null);
   };
 
   // Calculations
   const subtotal = calculateCartSubtotal(cart);
-  const discountAmount = calculateCouponDiscount(appliedCoupon, subtotal);
+  const couponMatchesCart = Boolean(appliedCoupon && Math.round(appliedCoupon.subtotal * 100) === Math.round(subtotal * 100));
+  const discountAmount = couponMatchesCart && appliedCoupon ? appliedCoupon.discountAmount : 0;
 
-  const shippingCharge = calculateShippingCharge(subtotal);
+  const shippingCharge = couponMatchesCart && appliedCoupon?.freeShipping ? 0 : calculateShippingCharge(subtotal);
 
   const taxAmount = 0; // Product prices are already displayed inclusive of taxes.
   const total = calculateCheckoutTotal({ subtotal, discountAmount, shippingCharge });
@@ -275,6 +385,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addToCart,
         removeFromCart,
         updateQuantity,
+        updateCartItemImage,
         saveForLater,
         moveToCart,
         clearCart,
@@ -291,6 +402,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         freeShippingThreshold: FREE_SHIPPING_THRESHOLD,
         freeShippingRemaining,
         totalItemsCount,
+        cartSyncError,
       }}
     >
       {children}

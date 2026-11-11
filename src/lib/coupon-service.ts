@@ -1,19 +1,24 @@
-import prisma from "@/lib/prisma";
 import { calculateCouponDiscount } from "@/lib/cart-model";
 
-export async function validateCouponForOrder(input: {
+export type CouponPrisma = {
+  coupon: any;
+  order: any;
+};
+
+export function createCouponValidator(prisma: CouponPrisma, now: () => Date = () => new Date()) {
+  return async function validateCouponForOrder(input: {
   code?: string | null;
   subtotal: number;
   email: string;
   userId?: string | null;
-}) {
+  }) {
   const code = input.code?.trim().toUpperCase();
   if (!code) return { valid: true as const, coupon: null, discountAmount: 0, freeShipping: false };
 
   const coupon = await prisma.coupon.findUnique({ where: { code } });
-  const now = new Date();
+  const currentTime = now();
   const email = input.email.trim().toLowerCase();
-  if (!coupon || !coupon.isActive || coupon.startDate > now || coupon.endDate < now ||
+  if (!coupon || !coupon.isActive || coupon.startDate > currentTime || coupon.endDate < currentTime ||
       input.subtotal < coupon.minOrderValue || (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit)) {
     return { valid: false as const, message: "This coupon is invalid, expired, or not eligible for this order." };
   }
@@ -44,4 +49,16 @@ export async function validateCouponForOrder(input: {
     return { valid: false as const, message: "This coupon does not apply to the current bag total." };
   }
   return { valid: true as const, coupon, discountAmount, freeShipping: coupon.freeShipping };
+  };
+}
+
+// Production wrapper loads the application singleton lazily. Integration tests
+// can import the factory without touching DATABASE_URL or Neon configuration.
+let productionValidator: ReturnType<typeof createCouponValidator> | undefined;
+export async function validateCouponForOrder(input: Parameters<NonNullable<typeof productionValidator>>[0]) {
+  if (!productionValidator) {
+    const { default: prisma } = await import("@/lib/prisma");
+    productionValidator = createCouponValidator(prisma);
+  }
+  return productionValidator(input);
 }

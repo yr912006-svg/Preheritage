@@ -1,81 +1,237 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #FAF7F2;
-  --foreground: #1C1917;
-  --primary: #C5A869;
-  --primary-dark: #99743A;
-  --accent: #881337;
-  --border: #E8E2D5;
+  color-scheme: light;
+  --background: #F7F0E4;
+  --foreground: #211B18;
+  --brand-charcoal: #211B18;
+  --brand-ivory: #F7F0E4;
+  --brand-white: #FFFFFF;
+  --brand-gold: #A67C45;
+  --brand-burgundy: #651F2B;
+  --brand-muted: #756A60;
+  --border: #E6DDCE;
 }
 
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
 body {
-  background-color: var(--background);
+  background: var(--background);
   color: var(--foreground);
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: var(--font-jakarta), 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
 }
 
 h1, h2, h3, h4, .font-serif {
-  font-family: 'Cormorant Garamond', 'Playfair Display', serif;
-  letter-spacing: -0.01em;
+  font-family: var(--font-cormorant), 'Cormorant Garamond', Georgia, serif;
+  letter-spacing: -0.015em;
 }
 
-/* Custom quiet luxury scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
+::selection { background: #E9D8B7; color: #24201D; }
+:focus-visible { outline: 2px solid #8A672E; outline-offset: 3px; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+input, select, textarea { accent-color: #B08A45; }
 
-::-webkit-scrollbar-track {
-  background: #FAF7F2;
-}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #F8F2E7; }
+::-webkit-scrollbar-thumb { background: #BDA778; }
+::-webkit-scrollbar-thumb:hover { background: #967236; }
 
-::-webkit-scrollbar-thumb {
-  background: #D5BC85;
-  border-radius: 3px;
-}
+.img-zoom-container { overflow: hidden; }
+.img-zoom-container img { transition: transform 700ms cubic-bezier(.25,1,.5,1); }
+.img-zoom-container:hover img { transform: scale(1.04); }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #C5A869;
-}
-
-/* Subtle gold shimmer */
-@keyframes goldShimmer {
+/* Luxury Cinematic Hero & Silk Motion */
+@keyframes silkBreathingSheen {
   0% {
-    background-position: -200% 0;
+    opacity: 0.18;
+    transform: translate3d(-1%, -1%, 0) scale(1);
+  }
+  50% {
+    opacity: 0.34;
+    transform: translate3d(1.5%, 2%, 0) scale(1.02);
   }
   100% {
-    background-position: 200% 0;
+    opacity: 0.18;
+    transform: translate3d(-1%, -1%, 0) scale(1);
   }
 }
 
-.gold-shimmer {
+@keyframes ambientWarmShift {
+  0% {
+    opacity: 0.3;
+    transform: translate3d(-15px, 0, 0);
+  }
+  50% {
+    opacity: 0.5;
+    transform: translate3d(15px, -10px, 0);
+  }
+  100% {
+    opacity: 0.3;
+    transform: translate3d(-15px, 0, 0);
+  }
+}
+
+@keyframes editorialFadeUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes shimmerSlide {
+  0% {
+    transform: translateX(-150%) skewX(-20deg);
+  }
+  100% {
+    transform: translateX(250%) skewX(-20deg);
+  }
+}
+
+.animate-hero-fade-1 {
+  animation: editorialFadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 0.1s;
+}
+
+.animate-hero-fade-2 {
+  animation: editorialFadeUp 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 0.25s;
+}
+
+.animate-hero-fade-3 {
+  animation: editorialFadeUp 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 0.4s;
+}
+
+.animate-hero-fade-4 {
+  animation: editorialFadeUp 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 0.55s;
+}
+
+.hero-silk-layer {
+  animation: silkBreathingSheen 14s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+.hero-ambient-warmth {
+  animation: ambientWarmShift 18s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+.cta-shimmer-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cta-shimmer-btn::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
   background: linear-gradient(
     90deg,
-    rgba(197, 168, 105, 0) 0%,
-    rgba(197, 168, 105, 0.2) 50%,
-    rgba(197, 168, 105, 0) 100%
+    transparent 0%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 100%
   );
-  background-size: 200% 100%;
-  animation: goldShimmer 2.5s infinite;
+  transform: translateX(-150%) skewX(-20deg);
+  pointer-events: none;
 }
 
-/* Subtle image zoom on hover */
-.img-zoom-container {
-  overflow: hidden;
+.cta-shimmer-btn:hover::after {
+  animation: shimmerSlide 1.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.img-zoom-container img {
-  transition: transform 0.7s cubic-bezier(0.25, 1, 0.5, 1);
+.luxury-card-lift {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease;
 }
 
-.img-zoom-container:hover img {
-  transform: scale(1.06);
+.luxury-card-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 36px -12px rgba(33, 27, 24, 0.16);
+}
+
+/* Editorial Navigation Underline Animation */
+.editorial-nav-link {
+  position: relative;
+  display: inline-block;
+  transition: color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.editorial-nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background-color: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.editorial-nav-link:hover::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+/* Subtle Hero Image Zoom */
+@keyframes subtleHeroZoom {
+  0% {
+    transform: scale(1.0);
+  }
+  100% {
+    transform: scale(1.045);
+  }
+}
+
+.animate-hero-zoom {
+  animation: subtleHeroZoom 22s cubic-bezier(0.25, 1, 0.5, 1) infinite alternate;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  .hero-silk-layer,
+  .hero-ambient-warmth,
+  .animate-hero-fade-1,
+  .animate-hero-fade-2,
+  .animate-hero-fade-3,
+  .animate-hero-fade-4,
+  .animate-hero-zoom,
+  .cta-shimmer-btn::after {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+  .editorial-nav-link::after {
+    display: none !important;
+  }
+  .luxury-card-lift:hover {
+    transform: none !important;
+  }
 }

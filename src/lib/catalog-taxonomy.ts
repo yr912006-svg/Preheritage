@@ -1,7 +1,108 @@
+import prisma from "@/lib/prisma";
+import { CATEGORIES } from "@/lib/sample-data";
 import { isAllowedProductImageUrl } from "@/lib/catalog-admin";
 
 export const TAXONOMY_KINDS = ["category", "subcategory", "collection", "region"] as const;
 export type TaxonomyKind = (typeof TAXONOMY_KINDS)[number];
+
+export const DEFAULT_SUBCATEGORIES: Record<string, { name: string; slug: string }[]> = {
+  sarees: [
+    { name: "Banarasi Katan Silk", slug: "banarasi-katan-silk" },
+    { name: "Kanjeevaram Silk", slug: "kanjeevaram-silk" },
+    { name: "Chanderi & Maheshwari", slug: "chanderi-maheshwari" },
+    { name: "Jamdani Muslin", slug: "jamdani-muslin" },
+    { name: "Patola & Bandhani", slug: "patola-bandhani" },
+  ],
+  kurtas: [
+    { name: "Chanderi Silk Kurtas", slug: "chanderi-silk-kurtas" },
+    { name: "Awadhi Angrakhas", slug: "awadhi-angrakhas" },
+    { name: "Handspun Khadi Tunics", slug: "handspun-khadi-tunics" },
+    { name: "Short Silk Tunics", slug: "short-silk-tunics" },
+  ],
+  lehengas: [
+    { name: "Bridal Zardozi Lehengas", slug: "bridal-zardozi-lehengas" },
+    { name: "Royal Gota Patti Sets", slug: "royal-gota-patti-sets" },
+    { name: "Banarasi Brocade Lehengas", slug: "banarasi-brocade-lehengas" },
+    { name: "Velvet Ceremonial Lehengas", slug: "velvet-ceremonial-lehengas" },
+  ],
+  "mens-ethnic-wear": [
+    { name: "Royal Sherwanis & Achkans", slug: "royal-sherwanis-achkans" },
+    { name: "Handcrafted Kurta Sets", slug: "handcrafted-kurta-sets" },
+    { name: "Tailored Nehru Jackets", slug: "tailored-nehru-jackets" },
+    { name: "Bandhgala Jackets", slug: "bandhgala-jackets" },
+  ],
+  handloom: [
+    { name: "GI-Tagged Master Weaves", slug: "gi-tagged-master-weaves" },
+    { name: "Khadi & Organic Cottons", slug: "khadi-organic-cottons" },
+    { name: "Ikat & Telia Rumal", slug: "ikat-telia-rumal" },
+    { name: "Tussar & Muga Silks", slug: "tussar-muga-silks" },
+  ],
+  handicrafts: [
+    { name: "Brass & Dhokra Sculptures", slug: "brass-dhokra-sculptures" },
+    { name: "Marble Inlay Artifacts", slug: "marble-inlay-artifacts" },
+    { name: "Wooden Heirlooms & Boxes", slug: "wooden-heirlooms-boxes" },
+    { name: "Silver Filigree", slug: "silver-filigree" },
+  ],
+  posters: [
+    { name: "Architectural Heritage Prints", slug: "architectural-heritage-prints" },
+    { name: "Mughal Botanical Lithographs", slug: "mughal-botanical-lithographs" },
+    { name: "Vintage Palace Monochromes", slug: "vintage-palace-monochromes" },
+  ],
+  accessories: [
+    { name: "Kashmiri Pashmina Shawls", slug: "kashmiri-pashmina-shawls" },
+    { name: "Hand-Embroidered Stoles", slug: "hand-embroidered-stoles" },
+    { name: "Potlis & Batwas", slug: "potlis-batwas" },
+    { name: "Heritage Jewelry & Brooches", slug: "heritage-jewelry-brooches" },
+  ],
+};
+
+let defaultTaxonomyEnsured = false;
+
+export async function ensureDefaultTaxonomy() {
+  if (defaultTaxonomyEnsured) return;
+  try {
+    const existing = await prisma.category.findMany({ select: { id: true, slug: true } });
+    const existingSlugs = new Map(existing.map((c) => [c.slug, c.id]));
+
+    for (let i = 0; i < CATEGORIES.length; i++) {
+      const cat = CATEGORIES[i];
+      if (!existingSlugs.has(cat.slug)) {
+        const created = await prisma.category.create({
+          data: {
+            name: cat.name,
+            slug: cat.slug,
+            description: cat.description,
+            image: cat.image,
+            orderIndex: i,
+          },
+        });
+        existingSlugs.set(cat.slug, created.id);
+      }
+    }
+
+    for (const [categorySlug, subcats] of Object.entries(DEFAULT_SUBCATEGORIES)) {
+      const categoryId = existingSlugs.get(categorySlug);
+      if (!categoryId) continue;
+      const count = await prisma.subcategory.count({ where: { categoryId } });
+      if (count === 0) {
+        for (const sub of subcats) {
+          await prisma.subcategory.upsert({
+            where: { slug: sub.slug },
+            update: {},
+            create: {
+              name: sub.name,
+              slug: sub.slug,
+              categoryId,
+            },
+          });
+        }
+      }
+    }
+    defaultTaxonomyEnsured = true;
+  } catch (error) {
+    console.error("Failed to ensure default taxonomy:", error);
+  }
+}
 
 export function slugFromName(value: string) {
   return value.normalize("NFKD").toLowerCase().replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 100);

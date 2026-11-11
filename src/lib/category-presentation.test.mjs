@@ -34,8 +34,9 @@ test("all sample categories are available when the database is unavailable", () 
   assert.deepEqual(mergeStorefrontCategories([], fallbackCategories), fallbackCategories);
 });
 
-test("missing category counts stay unavailable while actual zero counts remain accurate", () => {
-  assert.equal(getStorefrontCategoryCountLabel(null, "kurtas"), "Catalog count unavailable");
-  assert.equal(getStorefrontCategoryCountLabel({ sarees: 0 }, "sarees"), "0 Handcrafted Items");
-  assert.equal(getStorefrontCategoryCountLabel({ sarees: 3 }, "kurtas"), "Catalog count unavailable");
+test("missing category counts show a clean customer-facing fallback while actual counts are formatted", () => {
+  assert.equal(getStorefrontCategoryCountLabel(null, "kurtas"), "Curated Collection");
+  assert.equal(getStorefrontCategoryCountLabel({ sarees: 1 }, "sarees"), "1 Handcrafted Item");
+  assert.equal(getStorefrontCategoryCountLabel({ sarees: 3 }, "sarees"), "3 Handcrafted Items");
+  assert.equal(getStorefrontCategoryCountLabel({ sarees: 3 }, "kurtas"), "Curated Collection");
 });
